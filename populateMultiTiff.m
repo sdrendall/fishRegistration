@@ -37,9 +37,9 @@ function outputPath = formatOutputPath(basePath, channel)
         case 1
             c = 'red';
         case 2
-            c = 'blue';
-        case 3
             c = 'green';
+        case 3
+            c = 'blue';
         otherwise
             c = '';
     end

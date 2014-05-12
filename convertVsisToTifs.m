@@ -58,8 +58,8 @@ function convertToTif(vsiFile, targetDimensions)
     % Construct RGB image
     marginSize = targetDimensions - size(vsi{1,1}{2,1});
     rgb = zeros([targetDimensions, 3], 'uint8');
-    rgb(:,:,2) = toUint8(padarray(mat2gray(vsi{1,1}{2,1}), marginSize, 'post'));
-    rgb(:,:,3) = toUint8(padarray(mat2gray(vsi{1,1}{1,1}), marginSize, 'post'));
+    rgb(:,:,2) = toUint8(padarray(mat2gray(vsi{1,1}{2,1}), marginSize, 'post', 'replicate'));
+    rgb(:,:,3) = toUint8(padarray(mat2gray(vsi{1,1}{1,1}), marginSize, 'post', 'replicate'));
 
     % Save to tif
     [~, nameNoExt] = fileparts(vsiFile.name);
@@ -67,6 +67,8 @@ function convertToTif(vsiFile, targetDimensions)
     bfsave(rgb, fullfile(vsiFile.dataPath, writeName))
 
     clear rgb vsi
+
+function im = replaceZeros(im)
 
 
 function im = toUint8(im)
