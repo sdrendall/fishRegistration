@@ -8,13 +8,13 @@ if ~exist('channels', 'var')
     channels = [2 3];
 end
 
-% read in the first image
-im = imread(imagePaths);
 outputPath = cell(size(channels));
 
 for i = 1:length(channels)
+    % read in the first image
+    im = imread(imagePaths{1}, channels(i));
     outputPath{i} = formatOutputPath(baseOutput, channels(i));
-    imwrite(im(:,:,channels(i)), outputPath{i});
+    imwrite(im, outputPath{i});
 end
 
 if length(imagePaths) < 2
