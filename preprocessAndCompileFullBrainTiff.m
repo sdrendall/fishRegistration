@@ -21,6 +21,8 @@ function preprocessAndCompileFullBrainTiff(r)
         % Normalize x,y to thumbnail size
         crop(i).x = x ./ tx;
         crop(i).y = y ./ ty;
+        crop(i).x = assertBoundries(crop(i).x);
+        crop(i).y = assertBoundries(crop(i).y);
     end
 
     disp('saving coordinates.....')
@@ -53,6 +55,12 @@ function preprocessAndCompileFullBrainTiff(r)
     multiOut = fullfile(outputDir, 'fullBrain');
     populateMultiTiff({f(:).name}, multiOut);
 
+function c = assertBoundries(c)
+    if c > 1
+        c = 1
+    elseif c < 0
+        c = 0
+    end           
 
 function im = cropROI(im, x, y)
     % Determine Ultimate Image Size
