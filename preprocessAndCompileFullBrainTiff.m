@@ -46,15 +46,15 @@ function preprocessAndCompileFullBrainTiff(r)
     populateMultiTiff({f(:).name}, multiOut);
 
 
-    function im = cropROI(im, x, y)
-        % Determine Ultimate Image Size
-        xScaleCoEff = (max(crop(i).x) - min(crop(i).x));
-        yScaleCoEff = (max(crop(i).y) - min(crop(i).y));
-        sizeX = round(r(i).getSizeX * xScaleCoEff);
-        sizeY = round(r(i).getSizeY * yScaleCoEff);
-        % Find start points
-        [nr, nc] = size(im);
-        minX = round(min(x) * nc);
-        minY = round(min(y) * nr);
-        im = im(minY:minY+sizeY-1, minX:minX+sizeX-1);
-    end
+function im = cropROI(im, x, y)
+    % Determine Ultimate Image Size
+    xScaleCoEff = (max(crop(i).x) - min(crop(i).x));
+    yScaleCoEff = (max(crop(i).y) - min(crop(i).y));
+    sizeX = round(r(i).getSizeX * xScaleCoEff);
+    sizeY = round(r(i).getSizeY * yScaleCoEff);
+    % Find start points
+    [nr, nc] = size(im);
+    minX = round(min(x) * nc);
+    minY = round(min(y) * nr);
+    im = im(minY:minY+sizeY-1, minX:minX+sizeX-1);
+end
