@@ -57,4 +57,3 @@ function im = cropROI(im, x, y)
     minX = round(min(x) * nc);
     minY = round(min(y) * nr);
     im = im(minY:minY+sizeY-1, minX:minX+sizeX-1);
-end
