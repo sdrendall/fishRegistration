@@ -11,8 +11,10 @@ end
 outputPath = cell(size(channels));
 
 % Calculate Target Dimensions
+disp('calculating output image size....')
 [maxX, maxY] = getLargestDimensions(imagePaths);
 
+disp('generating multiTiff....')
 for i = 1:length(channels)
     % read in the first image
     im = imread(imagePaths{1}, channels(i));
@@ -33,6 +35,7 @@ parfor chan = 1:length(channels)
         imwrite(currIm, outputPath{chan}, 'WriteMode', 'append')
     end
 end
+disp('MultiTiff compiled!')
 
 
 

@@ -2,13 +2,17 @@ function preprocessAndCompileFullBrainTiff(r)
 
     thumb = cell(size(r));
     % load thumbs
+    disp('loading thumbnails....')
     for i = 1:length(r)
+        disp(['  ', num2str(i), '....'])
         thumb{i} = imresize(bfGetPlane(r(i), 1), .0625);
     end
 
     % Get Crop coords
+    disp('specify save location for crop coordinates')
     cropSave = uigetfile();
 
+    disp('please specify crop coordinates')
     figure
     for i = 1:length(thumb)
         imshow(thumb{i})
@@ -19,14 +23,17 @@ function preprocessAndCompileFullBrainTiff(r)
         crop(i).y = y ./ ty;
     end
 
+    disp('saving coordinates.....')
     save(cropSave, 'crop')
 
     % Create individual, preprocessed images
+    disp('specify output for cropped images.....')
     outputDir = uigetdir();
     if ~exist('outputDir', 'dir')
         mkdir(outputDir)
     end
 
+    disp('cropping and saving images.....')
     parfor i = 1:length(r)
         r(i).setSeries(0)
         xScaleCoEff = (max(crop(i).x) - min(crop(i).x));
@@ -40,6 +47,7 @@ function preprocessAndCompileFullBrainTiff(r)
         imwrite(im, outputPath)
     end
 
+    disp('compiling multitiff....')
     % Save to MultiTiff
     f = dir(fullfile(outputDir, '*.tif'));
     multiOut = fullfile(outputDir, 'fullBrain');
