@@ -11,7 +11,7 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
     end
 
     disp('calculating output dimensions.....')
-    [maxX, maxY] = calculateMaxImageSize(readers, crop)
+    [maxX, maxY] = calculateMaxImageSize(readers, crop);
     clear readers
 
     for i = 1:length(imagePaths)
