@@ -39,7 +39,7 @@ function im = cropAndProcess(im, r, crop, maxX, maxY)
 function im = removeZeros(im)
         nonZero = im(:) ~= 0;
         im(~nonZero) = min(im(nonZero));
-        im = mat2gray(im)
+        im = mat2gray(im);
 
 function im = padToMax(im, maxX, maxY)
     marginSize = [maxY, maxX] - size(im);
