@@ -5,13 +5,14 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
     load(cropCoordinatesPath)
 
     for i = 1:length(imagePaths)
-        r(i) = bfGetReader(imagePaths{i});
+        readers(i) = bfGetReader(imagePaths{i});
     end
 
-    [maxX, maxY] = calculateMaxImageSize(r, crop)
+    [maxX, maxY] = calculateMaxImageSize(readers, crop)
+    clear readers
 
     parfor i = 1:length(imagePaths)
-        r(i).setSeries(0)
+        r = bfGetReader(imagePaths{i});
         im = zeros([maxY, maxX, 3]);
         im(:,:,2) = cropAndProcess(bfGetPlane(r(i), 2), crop, maxX, maxY);
         im(:,:,3) = cropAndProcess(bfGetPlane(r(i), 1), crop, maxX, maxY);
