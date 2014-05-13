@@ -10,7 +10,7 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
 
     [maxX, maxY] = calculateMaxImageSize(r, crop)
 
-    parfor i = 1:length(r)
+    parfor i = 1:length(imagePaths)
         r(i).setSeries(0)
         im = zeros([maxY, maxX, 3]);
         im(:,:,2) = cropAndProcess(bfGetPlane(r(i), 2), crop, maxX, maxY);
