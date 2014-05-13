@@ -21,9 +21,9 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
         r = bfGetReader(imagePaths{i});
         im = zeros([maxY, maxX, 3]);
         disp('loading channel 2.....')
-        im(:,:,2) = cropAndProcess(bfGetPlane(r, 2), r, crop(i), maxX, maxY);
+        im(:,:,2) = cropAndProcess(bfGetPlane(r, 2), crop(i), maxX, maxY);
         disp('loading channel 3.....')
-        im(:,:,3) = cropAndProcess(bfGetPlane(r, 1), r, crop(i), maxX, maxY);
+        im(:,:,3) = cropAndProcess(bfGetPlane(r, 1), crop(i), maxX, maxY);
         [baseDir, baseName] = fileparts(imagePaths{i});
         outputPaths{i} = fullfile(baseDir, [baseName, '_preProc.tif']);
         imwrite(im, outputPaths{i})
@@ -31,9 +31,9 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
     end
 
 
-function im = cropAndProcess(im, r, crop, maxX, maxY)
+function im = cropAndProcess(im, crop, maxX, maxY)
     disp('cropping.....')
-    im = cropROI(im, r, crop);
+    im = cropROI(im, crop);
     disp('padding.....')
     im = padToMax(im, maxX, maxY);
     disp('clearing zeros.....')
@@ -55,16 +55,19 @@ function [maxX, maxY] = calculateMaxImageSize(r, crop_all)
     maxX = max(sizeX);
     maxY = max(sizeY);
 
-function im = cropROI(im, r, crop)
-    [sizeX, sizeY] = getCropSize(r, crop);
+function im = cropROI(im, crop)
     % Find start points
     [nr, nc] = size(im);
     minX = round(min(crop.x) * nc);
     minY = round(min(crop.y) * nr);
-    im = im(minY:minY+sizeY-1, minX:minX+sizeX-1);
+    maxX = round(max(crop.x) * nc);
+    maxY = round(max(crop.y) * nr);
+    im = im(minY:maxY, minX:maxX);
 
 function [sizeX, sizeY] = getCropSize(r, crop)
-    xScaleCoEff = (max(crop.x) - min(crop.x));
-    yScaleCoEff = (max(crop.y) - min(crop.y));
-    sizeX = round(r.getSizeX * xScaleCoEff);
-    sizeY = round(r.getSizeY * yScaleCoEff);
+    minX = round(min(crop.x) * r.getSizeX);
+    minY = round(min(crop.y) * r.getSizeY);
+    maxX = round(max(crop.x) * r.getSizeX);
+    maxY = round(max(crop.y) * r.getSizeY);
+    sizeX = maxX - minX + 1;
+    sizeY = maxY - minY + 1;
