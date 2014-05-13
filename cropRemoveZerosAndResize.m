@@ -2,16 +2,20 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
 %% Crops images at imagePaths, removes zeros, then resize
 
     % Load 'crop'
+    disp('Loading crop coordinates.....')
     load(cropCoordinatesPath)
 
     for i = 1:length(imagePaths)
         readers(i) = bfGetReader(imagePaths{i});
     end
 
+    disp('calculating output dimensions.....')
     [maxX, maxY] = calculateMaxImageSize(readers, crop)
     clear readers
 
     for i = 1:length(imagePaths)
+        disp(['processing image ', num2str(i), '.....'])
+        tic
         r = bfGetReader(imagePaths{i});
         im = zeros([maxY, maxX, 3]);
         im(:,:,2) = cropAndProcess(bfGetPlane(r, 2), crop, maxX, maxY);
@@ -19,12 +23,16 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
         [baseDir, baseName] = fileparts(imagePaths{i});
         outputPaths{i} = fullfile(baseDir, [baseName, '_preProc.tif']);
         imwrite(im, outputPaths{i})
+        disp(['processed ', baseName, ' in ', num2str(toc), ' seconds'])
     end
 
 
 function im = cropAndProcess(im, crop, maxX, maxY)
+    disp('cropping.....')
     im = cropROI(im, crop);
+    disp('padding.....')
     im = padToMax(im, maxX, maxY);
+    disp('clearing zeros.....')
     im = removeZeros(im);
 
 function im = removeZeros(im)
