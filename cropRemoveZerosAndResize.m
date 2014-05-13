@@ -11,7 +11,7 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
     [maxX, maxY] = calculateMaxImageSize(readers, crop)
     clear readers
 
-    parfor i = 1:length(imagePaths)
+    for i = 1:length(imagePaths)
         r = bfGetReader(imagePaths{i});
         im = zeros([maxY, maxX, 3]);
         im(:,:,2) = cropAndProcess(bfGetPlane(r, 2), crop, maxX, maxY);
