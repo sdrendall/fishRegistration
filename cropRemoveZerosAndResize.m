@@ -9,13 +9,13 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
     end
 
     [maxX, maxY] = calculateMaxImageSize(readers, crop)
-    clear readers
+    clear
 
     parfor i = 1:length(imagePaths)
         r = bfGetReader(imagePaths{i});
         im = zeros([maxY, maxX, 3]);
-        im(:,:,2) = cropAndProcess(bfGetPlane(r(i), 2), crop, maxX, maxY);
-        im(:,:,3) = cropAndProcess(bfGetPlane(r(i), 1), crop, maxX, maxY);
+        im(:,:,2) = cropAndProcess(bfGetPlane(r, 2), crop, maxX, maxY);
+        im(:,:,3) = cropAndProcess(bfGetPlane(r, 1), crop, maxX, maxY);
         [baseDir, baseName] = fileparts(imagePaths{i});
         outputPaths{i} = fullfile(baseDir, [baseName, '_preProc.tif']);
         imwrite(im, outputPaths{i})
