@@ -46,7 +46,7 @@ function im = removeZeros(im)
 
 function im = padToMax(im, maxX, maxY)
     marginSize = [maxY, maxX] - size(im);
-    im = padarray(im, marginSize, 'post', 'replicate');
+    im = padarray(im, marginSize, 'post');
 
 function [maxX, maxY] = calculateMaxImageSize(r, crop_all)
     for i = 1:length(r)
