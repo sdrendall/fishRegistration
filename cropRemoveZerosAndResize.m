@@ -18,8 +18,8 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
         tic
         r = bfGetReader(imagePaths{i});
         im = zeros([maxY, maxX, 3]);
-        im(:,:,2) = cropAndProcess(bfGetPlane(r, 2), r, crop, maxX, maxY);
-        im(:,:,3) = cropAndProcess(bfGetPlane(r, 1), r, crop, maxX, maxY);
+        im(:,:,2) = cropAndProcess(bfGetPlane(r, 2), r, crop(i), maxX, maxY);
+        im(:,:,3) = cropAndProcess(bfGetPlane(r, 1), r, crop(i), maxX, maxY);
         [baseDir, baseName] = fileparts(imagePaths{i});
         outputPaths{i} = fullfile(baseDir, [baseName, '_preProc.tif']);
         imwrite(im, outputPaths{i})
@@ -44,9 +44,9 @@ function im = padToMax(im, maxX, maxY)
     marginSize = [maxY, maxX] - size(im);
     im = padarray(im, marginSize, 'post');
 
-function [maxX, maxY] = calculateMaxImageSize(r, crop)
+function [maxX, maxY] = calculateMaxImageSize(r, crop_all)
     for i = 1:length(r)
-        [sizeX(i), sizeY(i)] = getCropSize(r(i), crop(i));
+        [sizeX(i), sizeY(i)] = getCropSize(r(i), crop_all(i));
     end
     maxX = max(sizeX);
     maxY = max(sizeY);
