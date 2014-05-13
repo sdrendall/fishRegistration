@@ -34,10 +34,10 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
 function im = cropAndProcess(im, crop, maxX, maxY)
     disp('cropping.....')
     im = cropROI(im, crop);
-    disp('clearing zeros.....')
-    im = removeZeros(im);
     disp('padding.....')
     im = padToMax(im, maxX, maxY);
+    disp('clearing zeros.....')
+    im = removeZeros(im);
 
 function im = removeZeros(im)
         nonZero = im ~= 0;
