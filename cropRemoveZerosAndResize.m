@@ -9,7 +9,7 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
     end
 
     [maxX, maxY] = calculateMaxImageSize(readers, crop)
-    clear
+    clear readers
 
     parfor i = 1:length(imagePaths)
         r = bfGetReader(imagePaths{i});
