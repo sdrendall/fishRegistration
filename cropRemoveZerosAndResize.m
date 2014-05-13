@@ -40,7 +40,7 @@ function im = cropAndProcess(im, crop, maxX, maxY)
     im = padToMax(im, maxX, maxY);
 
 function im = removeZeros(im)
-        nonZero = im(:) ~= 0;
+        nonZero = im ~= 0;
         im(~nonZero) = min(im(nonZero));
         im = mat2gray(im);
 
