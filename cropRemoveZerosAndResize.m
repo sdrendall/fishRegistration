@@ -34,10 +34,10 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
 function im = cropAndProcess(im, crop, maxX, maxY)
     disp('cropping.....')
     im = cropROI(im, crop);
-    disp('padding.....')
-    im = padToMax(im, maxX, maxY);
     disp('clearing zeros.....')
     im = removeZeros(im);
+    disp('padding.....')
+    im = padToMax(im, maxX, maxY);
 
 function im = removeZeros(im)
         nonZero = im(:) ~= 0;
@@ -46,7 +46,7 @@ function im = removeZeros(im)
 
 function im = padToMax(im, maxX, maxY)
     marginSize = [maxY, maxX] - size(im);
-    im = padarray(im, marginSize, 'post');
+    im = padarray(im, marginSize, 'post', 'replicate');
 
 function [maxX, maxY] = calculateMaxImageSize(r, crop_all)
     for i = 1:length(r)
