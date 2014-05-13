@@ -68,8 +68,6 @@ function convertToTif(vsiFile, targetDimensions)
 
     clear rgb vsi
 
-function im = replaceZeros(im)
-
 
 function im = toUint8(im)
     % Converts im to uint8, normalizes to 0-255
