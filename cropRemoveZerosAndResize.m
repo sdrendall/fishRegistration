@@ -5,6 +5,7 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
     disp('Loading crop coordinates.....')
     load(cropCoordinatesPath)
 
+    disp('Loading readers.....')
     for i = 1:length(imagePaths)
         readers(i) = bfGetReader(imagePaths{i});
     end
