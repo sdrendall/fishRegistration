@@ -20,7 +20,9 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
         tic
         r = bfGetReader(imagePaths{i});
         im = zeros([maxY, maxX, 3]);
+        disp('loading channel 2.....')
         im(:,:,2) = cropAndProcess(bfGetPlane(r, 2), r, crop(i), maxX, maxY);
+        disp('loading channel 3.....')
         im(:,:,3) = cropAndProcess(bfGetPlane(r, 1), r, crop(i), maxX, maxY);
         [baseDir, baseName] = fileparts(imagePaths{i});
         outputPaths{i} = fullfile(baseDir, [baseName, '_preProc.tif']);
