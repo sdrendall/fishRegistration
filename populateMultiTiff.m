@@ -46,7 +46,7 @@ function im = padToMax(im, maxX, maxY)
 function im = removeZeros(im)
         nonZero = im(:) ~= 0;
         im(~nonZero) = min(im(nonZero));
-        im = mat2gray(im)
+        im = mat2gray(im);
 
 function [maxX, maxY] = getLargestDimensions(paths)
     info = [];
