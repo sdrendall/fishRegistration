@@ -26,7 +26,7 @@ function outputPaths = cropRemoveZerosAndResize(imagePaths, cropCoordinatesPath)
         im(:,:,3) = cropAndProcess(bfGetPlane(r, 1), crop(i), maxX, maxY);
         [baseDir, baseName] = fileparts(imagePaths{i});
         outputPaths{i} = fullfile(baseDir, [baseName, '_preProc.tif']);
-        imwrite(im, outputPaths{i})
+        bfsave(im, outputPaths{i})
         disp(['processed ', baseName, ' in ', num2str(toc), ' seconds'])
     end
 
