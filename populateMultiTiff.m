@@ -49,8 +49,9 @@ function im = removeZeros(im)
         im = mat2gray(im)
 
 function [maxX, maxY] = getLargestDimensions(paths)
+    info = [];
     for i = 1:length(paths)
-        info(i) = imfinfo(paths{i})
+        info = [info; imfinfo(paths{i})];
     end
     maxX = max([info(:).Width]);
     maxY = max([info(:).Height]);
