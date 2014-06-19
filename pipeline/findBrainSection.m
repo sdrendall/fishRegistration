@@ -4,19 +4,32 @@ function mask = findBrainSection(im)
     % Returns a binary mask of the brain section in im
 
     %% Downsample im
-    scaleFactor = .005;
+    scaleFactor = .02;
     sIm = imresize(im, scaleFactor);
+
+    %% Lowpass Filter
+    %sIm = imfilter(sIm, fspecial('disk', 10));
+    %debugShow(sIm, 'smoothed')
+
+    %% "Background Subtract"
+    %sIm = hackyBackgroundSubtract(sIm)
+    %debugShow(sIm, '"Subtracted Background"')
 
     %% Segment Brain section
     thresh = graythresh(sIm(:));
     mask = im2bw(sIm, thresh);
     %debugShow(mask, 'raw mask')
 
+    %% Close
+    mask = imclose(mask, strel('disk', 6));
+    %debugShow(mask, 'closed')
+
     %% Clean up the mask
     mask = imfill(mask, 'holes');
     %debugShow(mask, 'filled')
 
-    mask = imerode(mask, strel('disk', 5));
+    %% Erode
+    mask = imerode(mask, strel('disk', 20));
     %debugShow(mask, 'after erosion')
 
     %% Get largest object
@@ -24,21 +37,12 @@ function mask = findBrainSection(im)
     %debugShow(mask, 'largest');
 
     %% Dialate
-    mask = imdilate(mask, strel('disk', 6));
+    mask = imdilate(mask, strel('disk', 20));
     %debugShow(mask, 'dilated')
-
 
     %% Resize
     mask = imresize(mask, size(im));
-
-    %% Hull
-    mask = bwconvhull(mask, 'Union');
     %debugShow(mask, 'final')
-
-
-    %% Close
-    %mask = imdilate(mask, strel('disk', 300));
-    %%debugShow(mask, 'final')
 
 
 function mask = getLargest(mask)
@@ -53,6 +57,13 @@ function mask = getLargest(mask)
     %% Set all other regions to zero
     mask(labMask ~= largest) = 0;
 
+function im = hackyBackgroundSubtract(im)
+    [nr, nc] = size(im);
+    fineSize = round(sqrt((nr*nc)/200)/(2*pi)) % radius
+    courseSize = round(sqrt((nr*nc)/6)) % square edge
+    fine = imfilter(im, fspecial('disk', fineSize));
+    course = imfilter(im, fspecial('average', courseSize));
+    im = fine - course;
 
 function debugShow(im, titleStr)
     figure, imshow(im, [])
