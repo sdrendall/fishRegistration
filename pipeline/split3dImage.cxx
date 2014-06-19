@@ -6,7 +6,7 @@
 
 int main(int argc, char *argv[]){
     // Check arguments
-    if (argc < 3) {
+    if (argc < 4) {
             std::cerr << "Missing Parameters " << std::endl;
             std::cerr << "Usage: " << argv[0];
             std::cerr << " 3DImagePath 2DBaseOutputPath ";
