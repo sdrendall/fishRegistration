@@ -9,7 +9,7 @@ function vsisTo3dTiff(vsiPath, tiffPath, dicomPath)
     %
     % The x and y dimensions of the output image are all set to the largest
     % found within the specified files.
-    dicomScale = .25;
+    dicomScale = .025;
 
     %% Find vsi files -- using bfReaders
     readers = findVsis(vsiPath);
@@ -26,7 +26,6 @@ function vsisTo3dTiff(vsiPath, tiffPath, dicomPath)
     % Initialize output container
     % MATLAB uses 4 dimensions for DICOM images
     dicomImage = uint8(zeros([dicomY, dicomX, 1, length(readers)]));
-    tiffWriter = TiffWriter(tiffPath);
     for i = 1:length(readers)
         %% Load dapi channel
         im = bfGetPlane(readers(i), 1);
@@ -40,7 +39,6 @@ function vsisTo3dTiff(vsiPath, tiffPath, dicomPath)
         im = padToMax(im, maxX, maxY);
 
         %% Append to 3d Image
-        tiffWriter.append(im)
         dicomImage(:,:,i) = imresize(im, [dicomY, dicomX]);
     end
 

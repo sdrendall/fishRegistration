@@ -1,10 +1,10 @@
-PROJECT(sliceAtlas)
+PROJECT(registerSliceToAtlas)
 
 FIND_PACKAGE(ITK)
 IF(ITK_FOUND)
     INCLUDE(${ITK_USE_FILE})
 ENDIF(ITK_FOUND)
 
-ADD_EXECUTABLE(sliceAtlas sliceAtlas.cxx)
+ADD_EXECUTABLE(registerSliceToAtlas registerSliceToAtlas.cxx)
 
-TARGET_LINK_LIBRARIES(sliceAtlas ${ITK_LIBRARIES})
+TARGET_LINK_LIBRARIES(registerSliceToAtlas ${ITK_LIBRARIES})
