@@ -12,17 +12,30 @@
 #include "itkCenteredTransformInitializer.h"
 #include "itkResampleImageFilter.h"
 
+#include "itkBSplineTransform.h"
+#include "itkLBFGSOptimizer.h"
+
 #include "itkPermuteAxesImageFilter.h"
 
 #include "itkExceptionObject.h"
 
+#include "itkTimeProbesCollectorBase.h"
+#include "itkMemoryProbesCollectorBase.h"
 #include "itkCommand.h"
 
 const char * atlasPath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/atlasVolume/atlasVolume.mhd";
+const unsigned int BSplineOrder = 3;
 
-itk::Image<unsigned char, 2>::Pointer getCoronalAtlasSlice(int);
-itk::Image<unsigned char, 2>::Pointer rotateImage(itk::Image<unsigned char, 2>::Pointer);
+typedef itk::Image<unsigned char, 2> ImageType;
+typedef itk::CenteredRigid2DTransform<double> RigidTransformType;
+typedef itk::BSplineTransform<double, 2, BSplineOrder> DeformableTransformType; // <CoordinateRepType, Dims, BSplineOrder>
+
+ImageType::Pointer getCoronalAtlasSlice(int);
+ImageType::Pointer rotateImage(ImageType::Pointer);
+RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
+DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
 double degreesToRadians(double);
+void writeImage(ImageType::Pointer, const char *);
 void displayRegistrationResults(itk::OptimizerParameters<double>, const unsigned int, const double);
 void debugOut(const char *);
 
@@ -71,132 +84,72 @@ int main(int argc, char *argv[]){
     }
 
     // Declare Image, filter types ect
-    typedef itk::Image<unsigned char, 2> AtlasSliceType;
-    typedef itk::Image<unsigned char, 2> InputImageType;
+    typedef itk::ImageFileReader<ImageType> ReaderType;
+    typedef itk::ImageFileWriter<ImageType> WriterType;
 
-    typedef itk::ImageFileReader<InputImageType> InputReaderType;
-    typedef itk::ImageFileWriter<AtlasSliceType> SliceWriterType;
-
-    typedef itk::CenteredRigid2DTransform<double> TransformType;
-    typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
-    typedef itk::MeanSquaresImageToImageMetric<InputImageType, AtlasSliceType> MetricType;
-    typedef itk::LinearInterpolateImageFunction<AtlasSliceType, double> InterpolatorType;
-    typedef itk::ImageRegistrationMethod<InputImageType, AtlasSliceType> RegistrationType;
-    typedef itk::ResampleImageFilter<AtlasSliceType, InputImageType> ResampleFilterType;
+    typedef itk::ResampleImageFilter<ImageType, ImageType> ResampleFilterType;
     
-    typedef itk::CenteredTransformInitializer<TransformType, InputImageType, AtlasSliceType> TransformInitializerType;
 
     // Get corresponding atlas slice
-    AtlasSliceType::Pointer atlasSlice = getCoronalAtlasSlice(atoi(argv[2]));
+    ImageType::Pointer atlasSlice = getCoronalAtlasSlice(atoi(argv[2]));
 
-    // Save the slice locally, until I feel more confident
-    SliceWriterType::Pointer debugWriter = SliceWriterType::New();
-    debugWriter->SetFileName("extractedSlice.jpg");
-    debugWriter->SetInput(atlasSlice);
-    debugWriter->Update();
-    
-    // --- Rough Rigid Registration ---
-
-    // Set up our input reader
-    InputReaderType::Pointer inputReader = InputReaderType::New();
+    // Load the input image
+    ReaderType::Pointer inputReader = ReaderType::New();
     inputReader->SetFileName(argv[1]);
     inputReader->Update();
-    InputImageType::Pointer inputImage = inputReader->GetOutput();
+    ImageType::Pointer inputImage = inputReader->GetOutput();
 
-    // Instantiate the metric, optimizer, interpolator and registration objects
-    MetricType::Pointer         metric        = MetricType::New();
-    OptimizerType::Pointer      optimizer     = OptimizerType::New();
-    InterpolatorType::Pointer   interpolator  = InterpolatorType::New();
-    TransformType::Pointer      transform     = TransformType::New();
-    RegistrationType::Pointer   registration  = RegistrationType::New();
+    // Set the input spacing and atlas direction
+    ImageType::SpacingType spacing;
+    spacing[0] = 25.7764;
+    spacing[1] = 25.7764;
+    inputImage->SetSpacing(spacing);
+    atlasSlice->SetDirection(inputImage->GetDirection());
 
-    // Set up the registration
-    registration->SetMetric(metric);
-    registration->SetOptimizer(optimizer);
-    registration->SetInterpolator(interpolator);
-    registration->SetTransform(transform);
+    // Save the slice locally, until I feel more confident
+    writeImage(atlasSlice, "/home/sam/Desktop/extractedSlice.jpg");
+    writeImage(inputImage, "/home/sam/Desktop/inputImage.jpg");
 
-    registration->SetInitialTransformParameters(transform->GetParameters());
+    RigidTransformType::Pointer rigidTransform = getRigidRegistrationTransform(inputImage, atlasSlice);
+    
+    // Resample the atlas using the computed rigid transform
+    ResampleFilterType::Pointer rigidResampler = ResampleFilterType::New();
+    rigidResampler->SetTransform(rigidTransform);
+    rigidResampler->SetInput(atlasSlice);
 
-    // Set the inputs
-    registration->SetFixedImage(inputImage);
-    registration->SetMovingImage(atlasSlice);
+    rigidResampler->SetSize(inputImage->GetLargestPossibleRegion().GetSize());
+    rigidResampler->SetOutputOrigin(inputImage->GetOrigin());
+    rigidResampler->SetOutputSpacing(inputImage->GetSpacing());
+    rigidResampler->SetOutputDirection(inputImage->GetDirection());
+    rigidResampler->SetDefaultPixelValue(0);
 
-    registration->SetFixedImageRegion(atlasSlice->GetBufferedRegion());
+    // Update, to resample the image so it can be used for the deformable registration
+    rigidResampler->Update();
 
-    // Create an initializer and connect it to the input images and the transform
-    TransformInitializerType::Pointer initializer = TransformInitializerType::New();
-    initializer->SetFixedImage(inputImage);
-    initializer->SetMovingImage(atlasSlice);
-    initializer->SetTransform(transform);
+    // Compute a deformable registration transform using the resampled atlas slice and the input image
+    DeformableTransformType::Pointer deformableTransform = getDeformableRegistrationTransform(rigidResampler->GetOutput(), inputImage); // (fixedImage, movingImage)
 
-    // MomentsOn() sets the initializer to center of mass mode
-    initializer->MomentsOn();
-    initializer->InitializeTransform();
+    ResampleFilterType::Pointer deformableResampler = ResampleFilterType::New();
+    deformableResampler->SetTransform(deformableTransform);
+    deformableResampler->SetInput(rigidResampler->GetOutput());
 
-    // Set up the optimizer
-    //  The Optimizer is responsible for sustaining and terminating registration iteration
-    // I'm not entirely sure what the purpose of scales is
-    OptimizerType::ScalesType optimizerScales(transform->GetNumberOfParameters());
-    const double translationScale = 1.0/1000.0;
-
-    optimizerScales[0] = 1.0;
-    for (int i = 1; i <= 4; i++) {
-        optimizerScales[i] = translationScale;
-    }
-    optimizer->SetScales(optimizerScales);
-
-    // These metrics determine when the optimizer will terminate registration
-    optimizer->SetMaximumStepLength(0.1);
-    optimizer->SetMinimumStepLength(0.001);
-    optimizer->SetNumberOfIterations(200);
-
-    // The command observer will report on the registrations progress at each iteration
-    //  The class definition is below, and taken directly from the ImageRegistration6.cxx example
-    CommandIterationUpdate::Pointer observer = CommandIterationUpdate::New();
-    optimizer->AddObserver(itk::IterationEvent(), observer);
-
-    // Begin Registration by calling Update()
-    try {
-        registration->Update();
-        std::cout << "Optimizer stop condition: "
-                  << registration->GetOptimizer()->GetStopConditionDescription()
-                  << std::endl;
-    } catch( itk::ExceptionObject & err ) {
-        std::cerr << "ExceptionObject caught !" << std::endl;
-        std::cerr << err << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    // Display the final registration transformation parameters
-    OptimizerType::ParametersType registrationParameters = registration->GetLastTransformParameters();
-    displayRegistrationResults(registrationParameters, optimizer->GetCurrentIteration(), optimizer->GetValue());
-
-    // Apply the computed rigid registration to the slice
-    TransformType::Pointer registrationTransform = TransformType::New();
-    registrationTransform->SetParameters(registrationParameters);
-    registrationTransform->SetFixedParameters(transform->GetFixedParameters());
-
-    ResampleFilterType::Pointer resampler = ResampleFilterType::New();
-    resampler->SetTransform(registrationTransform);
-    resampler->SetInput(atlasSlice);
-
-    resampler->SetSize(inputImage->GetLargestPossibleRegion().GetSize());
-    resampler->SetOutputOrigin(inputImage->GetOrigin());
-    resampler->SetOutputSpacing(inputImage->GetSpacing());
-    resampler->SetOutputDirection(inputImage->GetDirection());
-    resampler->SetDefaultPixelValue(0);
+    // This should really be done with a function...
+    deformableResampler->SetSize(inputImage->GetLargestPossibleRegion().GetSize());
+    deformableResampler->SetOutputOrigin(inputImage->GetOrigin());
+    deformableResampler->SetOutputSpacing(inputImage->GetSpacing());
+    deformableResampler->SetOutputDirection(inputImage->GetDirection());
+    deformableResampler->SetDefaultPixelValue(0);
 
     // Finally, connect the file writer to write the output file
-    SliceWriterType::Pointer outputWriter = SliceWriterType::New();
+    WriterType::Pointer outputWriter = WriterType::New();
     outputWriter->SetFileName(argv[3]);
-    outputWriter->SetInput(resampler->GetOutput());
+    outputWriter->SetInput(deformableResampler->GetOutput());
     outputWriter->Update();
 
     return EXIT_SUCCESS;
 }
 
-itk::Image<unsigned char, 2>::Pointer getCoronalAtlasSlice(int sliceDepth) {
+ImageType::Pointer getCoronalAtlasSlice(int sliceDepth) {
     // Declare 3D and 2D image types
     typedef unsigned char AtlasPixelType;
     typedef unsigned char SlicePixelType;
@@ -261,8 +214,7 @@ itk::Image<unsigned char, 2>::Pointer getCoronalAtlasSlice(int sliceDepth) {
     }
 }
 
-itk::Image<unsigned char, 2>::Pointer rotateImage(itk::Image<unsigned char, 2>::Pointer inputImage) {
-    typedef itk::Image<unsigned char, 2> ImageType;
+ImageType::Pointer rotateImage(ImageType::Pointer inputImage) {
     typedef itk::PermuteAxesImageFilter<ImageType> PermuteAxesFilterType;
 
     // Create a permutation filter
@@ -283,6 +235,192 @@ itk::Image<unsigned char, 2>::Pointer rotateImage(itk::Image<unsigned char, 2>::
     return outputImage;
 }
 
+RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inputImage, ImageType::Pointer atlasSlice) {
+    typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
+    typedef itk::MeanSquaresImageToImageMetric<ImageType, ImageType> MetricType;
+    typedef itk::LinearInterpolateImageFunction<ImageType, double> InterpolatorType;
+    typedef itk::ImageRegistrationMethod<ImageType, ImageType> RegistrationType;
+    typedef itk::CenteredTransformInitializer<RigidTransformType, ImageType, ImageType> TransformInitializerType;
+
+    // Instantiate the metric, optimizer, interpolator and registration objects
+    MetricType::Pointer         metric        = MetricType::New();
+    OptimizerType::Pointer      optimizer     = OptimizerType::New();
+    InterpolatorType::Pointer   interpolator  = InterpolatorType::New();
+    RigidTransformType::Pointer      transform     = RigidTransformType::New();
+    RegistrationType::Pointer   registration  = RegistrationType::New();
+
+    // Set up the registration
+    registration->SetMetric(metric);
+    registration->SetOptimizer(optimizer);
+    registration->SetInterpolator(interpolator);
+    registration->SetTransform(transform);
+
+    // Set the inputs
+    registration->SetFixedImage(inputImage);
+    registration->SetMovingImage(atlasSlice);
+
+    registration->SetFixedImageRegion(inputImage->GetBufferedRegion());
+
+    // Create an initializer and connect it to the input images and the transform
+    TransformInitializerType::Pointer initializer = TransformInitializerType::New();
+    initializer->SetFixedImage(inputImage);
+    initializer->SetMovingImage(atlasSlice);
+    initializer->SetTransform(transform);
+
+    // MomentsOn() sets the initializer to center of mass mode
+    initializer->MomentsOn();
+
+    // Compute the initial transform using the center of mass
+    initializer->InitializeTransform();
+    transform->SetAngle(0.0);
+
+    // Get the computed parameters and initialize the transform with them
+    registration->SetInitialTransformParameters(transform->GetParameters());
+
+    // Set up the optimizer
+    //  The Optimizer is responsible for sustaining and terminating registration iteration
+    // I'm not entirely sure what the purpose of scales is
+    OptimizerType::ScalesType optimizerScales(transform->GetNumberOfParameters());
+    const double translationScale = 25.0/1000.0;
+
+    optimizerScales[0] = 0.0001;
+    for (int i = 1; i <= 4; i++) {
+        optimizerScales[i] = translationScale;
+    }
+    optimizer->SetScales(optimizerScales);
+
+    // These metrics determine when the optimizer will terminate registration
+    optimizer->SetMaximumStepLength(0.1);
+    optimizer->SetMinimumStepLength(0.001);
+    optimizer->SetNumberOfIterations(200);
+
+    // The command observer will report on the registrations progress at each iteration
+    //  The class definition is below, and taken directly from the ImageRegistration6.cxx example
+    CommandIterationUpdate::Pointer observer = CommandIterationUpdate::New();
+    optimizer->AddObserver(itk::IterationEvent(), observer);
+
+    // Begin Registration by calling Update()
+    try {
+        registration->Update();
+        std::cout << "Optimizer stop condition: "
+                  << registration->GetOptimizer()->GetStopConditionDescription()
+                  << std::endl;
+    } catch ( itk::ExceptionObject & err ) {
+        std::cerr << "ExceptionObject caught !" << std::endl;
+        std::cerr << err << std::endl;
+        throw 1337;
+    }
+
+    // Display the final registration transformation parameters
+    OptimizerType::ParametersType registrationParameters = registration->GetLastTransformParameters();
+    displayRegistrationResults(registrationParameters, optimizer->GetCurrentIteration(), optimizer->GetValue());
+
+    // return the transform computed by the registration
+    RigidTransformType::Pointer registrationTransform = RigidTransformType::New();
+    registrationTransform->SetParameters(registrationParameters);
+    registrationTransform->SetFixedParameters(transform->GetFixedParameters());
+    return registrationTransform;
+}
+
+DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::Pointer movingImage, ImageType::Pointer fixedImage){
+    typedef itk::LBFGSOptimizer OptimizerType;
+    typedef itk::MeanSquaresImageToImageMetric<ImageType, ImageType> MetricType;
+    typedef itk::LinearInterpolateImageFunction<ImageType, double> InterpolatorType;
+    typedef itk::ImageRegistrationMethod<ImageType, ImageType> RegistrationType;
+    typedef DeformableTransformType::ParametersType ParametersType;
+
+    // Instantiate the metric, optimizer, interpolator, transform and registration objects
+    MetricType::Pointer metric = MetricType::New();
+    OptimizerType::Pointer optimizer = OptimizerType::New();
+    InterpolatorType::Pointer interpolator = InterpolatorType::New();
+    RegistrationType::Pointer registration = RegistrationType::New();
+    DeformableTransformType::Pointer transform = DeformableTransformType::New();
+
+    // Connect everything to the registration object
+    registration->SetMetric(metric);
+    registration->SetOptimizer(optimizer);
+    registration->SetInterpolator(interpolator);
+    registration->SetTransform(transform);
+
+    // Connect the inputs
+    registration->SetFixedImage(fixedImage);
+    registration->SetMovingImage(movingImage);
+    registration->SetFixedImageRegion(fixedImage->GetBufferedRegion());
+
+    // Calculate image physical dimensions and meshSize
+    DeformableTransformType::PhysicalDimensionsType fixedPhysicalDimensions;
+    DeformableTransformType::MeshSizeType meshSize;
+    DeformableTransformType::OriginType fixedOrigin = fixedImage->GetOrigin();
+    ImageType::SizeType fixedImageSize = fixedImage->GetLargestPossibleRegion().GetSize();
+    unsigned int numberOfGridNodesInOneDimension = 8;
+
+    for (int i = 0; i < 2; i++) {
+        fixedPhysicalDimensions[i] = fixedImageSize[i] * fixedImage->GetSpacing()[i];
+    }
+
+    meshSize.Fill(numberOfGridNodesInOneDimension - BSplineOrder);
+
+    // Define the transform domain
+    transform->SetTransformDomainOrigin(fixedOrigin);
+    transform->SetTransformDomainPhysicalDimensions(fixedPhysicalDimensions);
+    transform->SetTransformDomainMeshSize(meshSize);
+    transform->SetTransformDomainDirection(fixedImage->GetDirection());
+
+    // Set the initial transform parameters
+    const unsigned int numberOfParameters = transform->GetNumberOfParameters();
+    ParametersType parameters(numberOfParameters);
+    parameters.Fill(0.0);
+    transform->SetParameters(parameters);
+    registration->SetInitialTransformParameters(transform->GetParameters());
+
+    // Specify the optimizer parameters
+    optimizer->SetGradientConvergenceTolerance(0.05);
+    optimizer->SetLineSearchAccuracy(0.9);
+    optimizer->SetDefaultStepLength(1.5);
+    optimizer->TraceOn();
+    optimizer->SetMaximumNumberOfFunctionEvaluations(1000);
+
+    // Prepare time and memory probes
+    itk::TimeProbesCollectorBase chronometer;
+    itk::MemoryProbesCollectorBase memorymeter;
+    
+    // Start Registration
+    std::cout << std::endl << "Starting Registration" << std::endl;
+    try {
+        memorymeter.Start("Registration");
+        chronometer.Start("Registration");
+
+        registration->Update();
+
+        chronometer.Stop("Registration");
+        memorymeter.Stop("Registration");
+
+        std::cout << "Optimizer stop condition = "
+                  << registration->GetOptimizer()->GetStopConditionDescription()
+                  << std::endl;
+    } catch ( itk::ExceptionObject & err ) {
+        std::cerr << "ExceptionObject caught !" << std::endl;
+        std::cerr << err << std::endl;
+        throw 1337;
+    }
+
+    // Return the computed transform
+    OptimizerType::ParametersType finalParameters = registration->GetLastTransformParameters();
+
+    std::cout << "Finale BSpline Transform Parameters" << std::endl;
+    std::cout << finalParameters << std::endl;
+
+    transform->SetParameters(finalParameters);
+    return transform;
+}
+
+void writeImage(ImageType::Pointer im, const char * path) {
+    typedef itk::ImageFileWriter<ImageType> WriterType;
+    WriterType::Pointer fileWriter = WriterType::New();
+    fileWriter->SetFileName(path);
+    fileWriter->SetInput(im);
+    fileWriter->Update();
+}
 
 double degreesToRadians(double degrees) {
     const double conversionFactor = vcl_atan(1.0)/45.0;
