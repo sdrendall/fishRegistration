@@ -407,7 +407,7 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
     // Return the computed transform
     OptimizerType::ParametersType finalParameters = registration->GetLastTransformParameters();
 
-    std::cout << "Finale BSpline Transform Parameters" << std::endl;
+    std::cout << "Final BSpline Transform Parameters" << std::endl;
     std::cout << finalParameters << std::endl;
 
     transform->SetParameters(finalParameters);
