@@ -10,9 +10,9 @@
 #include "itkRegularStepGradientDescentOptimizer.h"
 #include "itkCenteredRigid2DTransform.h"
 #include "itkCenteredTransformInitializer.h"
-
 #include "itkResampleImageFilter.h"
-#include "itkAffineTransform.h"
+
+#include "itkPermuteAxesImageFilter.h"
 
 #include "itkExceptionObject.h"
 
@@ -23,6 +23,7 @@ const char * atlasPath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/at
 itk::Image<unsigned char, 2>::Pointer getCoronalAtlasSlice(int);
 itk::Image<unsigned char, 2>::Pointer rotateImage(itk::Image<unsigned char, 2>::Pointer);
 double degreesToRadians(double);
+void displayRegistrationResults(itk::OptimizerParameters<double>, const unsigned int, const double);
 void debugOut(const char *);
 
 // Observer class, to output the progress of the registration
@@ -81,7 +82,8 @@ int main(int argc, char *argv[]){
     typedef itk::MeanSquaresImageToImageMetric<InputImageType, AtlasSliceType> MetricType;
     typedef itk::LinearInterpolateImageFunction<AtlasSliceType, double> InterpolatorType;
     typedef itk::ImageRegistrationMethod<InputImageType, AtlasSliceType> RegistrationType;
-
+    typedef itk::ResampleImageFilter<AtlasSliceType, InputImageType> ResampleFilterType;
+    
     typedef itk::CenteredTransformInitializer<TransformType, InputImageType, AtlasSliceType> TransformInitializerType;
 
     // Get corresponding atlas slice
@@ -98,6 +100,8 @@ int main(int argc, char *argv[]){
     // Set up our input reader
     InputReaderType::Pointer inputReader = InputReaderType::New();
     inputReader->SetFileName(argv[1]);
+    inputReader->Update();
+    InputImageType::Pointer inputImage = inputReader->GetOutput();
 
     // Instantiate the metric, optimizer, interpolator and registration objects
     MetricType::Pointer         metric        = MetricType::New();
@@ -112,15 +116,17 @@ int main(int argc, char *argv[]){
     registration->SetInterpolator(interpolator);
     registration->SetTransform(transform);
 
+    registration->SetInitialTransformParameters(transform->GetParameters());
+
     // Set the inputs
-    registration->SetFixedImage(inputReader->GetOutput());
+    registration->SetFixedImage(inputImage);
     registration->SetMovingImage(atlasSlice);
 
     registration->SetFixedImageRegion(atlasSlice->GetBufferedRegion());
 
     // Create an initializer and connect it to the input images and the transform
     TransformInitializerType::Pointer initializer = TransformInitializerType::New();
-    initializer->SetFixedImage(inputReader->GetOutput());
+    initializer->SetFixedImage(inputImage);
     initializer->SetMovingImage(atlasSlice);
     initializer->SetTransform(transform);
 
@@ -150,46 +156,42 @@ int main(int argc, char *argv[]){
     CommandIterationUpdate::Pointer observer = CommandIterationUpdate::New();
     optimizer->AddObserver(itk::IterationEvent(), observer);
 
-    // Finally, connect the file writer to write the output file
-    SliceWriterType::Pointer outputWriter = SliceWriterType::New();
-    outputWriter->SetFileName(argv[3]);
-    outputWriter->SetInput(registration->GetOutput());
-
-    // Begin Registration by calling Update() on the outputWriter object
+    // Begin Registration by calling Update()
     try {
-    outputWriter->Update();
-    std::cout << "Optimizer stop condition: "
-              << registration->GetOptimizer()->GetStopConditionDescription()
-              << std::endl;
+        registration->Update();
+        std::cout << "Optimizer stop condition: "
+                  << registration->GetOptimizer()->GetStopConditionDescription()
+                  << std::endl;
     } catch( itk::ExceptionObject & err ) {
         std::cerr << "ExceptionObject caught !" << std::endl;
         std::cerr << err << std::endl;
         return EXIT_FAILURE;
     }
 
-    // Display final results
-    OptimizerType::ParametersType finalParameters = registration->GetLastTransformParameters();
+    // Display the final registration transformation parameters
+    OptimizerType::ParametersType registrationParameters = registration->GetLastTransformParameters();
+    displayRegistrationResults(registrationParameters, optimizer->GetCurrentIteration(), optimizer->GetValue());
 
-    const double finalAngle           = finalParameters[0];
-    const double finalRotationCenterX = finalParameters[1];
-    const double finalRotationCenterY = finalParameters[2];
-    const double finalTranslationX    = finalParameters[3];
-    const double finalTranslationY    = finalParameters[4];
-    
-    const unsigned int numberOfIterations = optimizer->GetCurrentIteration();
-    const double bestValue = optimizer->GetValue();
-    
-    const double finalAngleInDegrees = finalAngle * 180.0 / vnl_math::pi;
-    
-    std::cout << "Result = " << std::endl;
-    std::cout << " Angle (radians) " << finalAngle  << std::endl;
-    std::cout << " Angle (degrees) " << finalAngleInDegrees  << std::endl;
-    std::cout << " Center X      = " << finalRotationCenterX  << std::endl;
-    std::cout << " Center Y      = " << finalRotationCenterY  << std::endl;
-    std::cout << " Translation X = " << finalTranslationX  << std::endl;
-    std::cout << " Translation Y = " << finalTranslationY  << std::endl;
-    std::cout << " Iterations    = " << numberOfIterations << std::endl;
-    std::cout << " Metric value  = " << bestValue          << std::endl;
+    // Apply the computed rigid registration to the slice
+    TransformType::Pointer registrationTransform = TransformType::New();
+    registrationTransform->SetParameters(registrationParameters);
+    registrationTransform->SetFixedParameters(transform->GetFixedParameters());
+
+    ResampleFilterType::Pointer resampler = ResampleFilterType::New();
+    resampler->SetTransform(registrationTransform);
+    resampler->SetInput(atlasSlice);
+
+    resampler->SetSize(inputImage->GetLargestPossibleRegion().GetSize());
+    resampler->SetOutputOrigin(inputImage->GetOrigin());
+    resampler->SetOutputSpacing(inputImage->GetSpacing());
+    resampler->SetOutputDirection(inputImage->GetDirection());
+    resampler->SetDefaultPixelValue(0);
+
+    // Finally, connect the file writer to write the output file
+    SliceWriterType::Pointer outputWriter = SliceWriterType::New();
+    outputWriter->SetFileName(argv[3]);
+    outputWriter->SetInput(resampler->GetOutput());
+    outputWriter->Update();
 
     return EXIT_SUCCESS;
 }
@@ -261,59 +263,24 @@ itk::Image<unsigned char, 2>::Pointer getCoronalAtlasSlice(int sliceDepth) {
 
 itk::Image<unsigned char, 2>::Pointer rotateImage(itk::Image<unsigned char, 2>::Pointer inputImage) {
     typedef itk::Image<unsigned char, 2> ImageType;
-    typedef itk::ResampleImageFilter<ImageType, ImageType> RotationFilterType;
-    typedef itk::AffineTransform<double, 2> TransformType;
-    typedef itk::LinearInterpolateImageFunction<ImageType, double> InterpolatorType;
+    typedef itk::PermuteAxesImageFilter<ImageType> PermuteAxesFilterType;
 
-    const float rotationAngle = 90.0;
+    // Create a permutation filter
+    PermuteAxesFilterType::Pointer permutationFilter = PermuteAxesFilterType::New();
 
-    RotationFilterType::Pointer rotationFilter = RotationFilterType::New();
-    rotationFilter->SetInterpolator(InterpolatorType::New());
-    rotationFilter->SetDefaultPixelValue(0);
+    // Define the axes permutation order
+    itk::FixedArray<unsigned int, 2> order;
+    order[0] = 1;
+    order[1] = 0;
+    
+    // Permute the axes
+    permutationFilter->SetInput(inputImage);
+    permutationFilter->SetOrder(order);
+    permutationFilter->Update();
 
-    // Copy parameters from the input image
-    const ImageType::SpacingType & spacing = inputImage->GetSpacing();
-    const ImageType::PointType & origin = inputImage->GetOrigin();
-    ImageType::SizeType size = inputImage->GetLargestPossibleRegion().GetSize();
-
-    // Set Output Parameters
-    rotationFilter->SetOutputOrigin(origin);
-    rotationFilter->SetOutputSpacing(spacing);
-    rotationFilter->SetOutputDirection(inputImage->GetDirection());
-    rotationFilter->SetSize(size);
-
-    // Specify the set of tranformations to be carried out by the rotationFilter
-    // Translate the image so that it's centered on it's physical origin
-    TransformType::Pointer transform = TransformType::New();
-    TransformType::OutputVectorType translation1;
-
-    const double imageCenterX = origin[0] + spacing[0] * size[0] / 2.0;
-    const double imageCenterY = origin[1] + spacing[1] * size[1] / 2.0;
-
-    translation1[0] = -imageCenterX;
-    translation1[1] = -imageCenterY;
-
-    transform->Translate(translation1);
-
-    // Rotate the image around it's physical origin
-    const double angle = degreesToRadians(rotationAngle);
-    transform->Rotate2D(-angle, false);
-
-    // Translate back to original position
-    TransformType::OutputVectorType translation2;
-
-    translation2[0] = imageCenterX;
-    translation2[1] = imageCenterY;
-
-    transform->Translate(translation2, false);
-
-    // Now that the transform is specified, connect it to the rotationFilter.
-    rotationFilter->SetTransform(transform);
-
-    // Perform the rotation and return the result
-    rotationFilter->Update();
-    ImageType::Pointer rotatedImage = rotationFilter->GetOutput();
-    return rotatedImage;
+    // Return the permuted image
+    ImageType::Pointer outputImage = permutationFilter->GetOutput();
+    return outputImage;
 }
 
 
@@ -325,4 +292,24 @@ double degreesToRadians(double degrees) {
 
 void debugOut(const char * msg) {
     std::cout << "[Debug] " << msg << std::endl;
+}
+
+void displayRegistrationResults(itk::OptimizerParameters<double> finalParameters, const unsigned int numberOfIterations, const double bestValue) {
+    const double finalAngle           = finalParameters[0];
+    const double finalRotationCenterX = finalParameters[1];
+    const double finalRotationCenterY = finalParameters[2];
+    const double finalTranslationX    = finalParameters[3];
+    const double finalTranslationY    = finalParameters[4];
+
+    const double finalAngleInDegrees = finalAngle * 180.0 / vnl_math::pi;
+    
+    std::cout << "Result = " << std::endl;
+    std::cout << " Angle (radians) " << finalAngle  << std::endl;
+    std::cout << " Angle (degrees) " << finalAngleInDegrees  << std::endl;
+    std::cout << " Center X      = " << finalRotationCenterX  << std::endl;
+    std::cout << " Center Y      = " << finalRotationCenterY  << std::endl;
+    std::cout << " Translation X = " << finalTranslationX  << std::endl;
+    std::cout << " Translation Y = " << finalTranslationY  << std::endl;
+    std::cout << " Iterations    = " << numberOfIterations << std::endl;
+    std::cout << " Metric value  = " << bestValue          << std::endl;
 }
