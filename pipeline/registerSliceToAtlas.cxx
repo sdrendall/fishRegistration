@@ -166,9 +166,10 @@ int main(int argc, char *argv[]){
 
     // Update, to resample the image so it can be used for the deformable registration
     rigidResampler->Update();
+    writeImage(rigidResampler->GetOutput(), "/home/sam/afterRigidRegistration.jpg");
 
     // Compute a deformable registration transform using the resampled atlas slice and the input image
-    DeformableTransformType::Pointer deformableTransform = getDeformableRegistrationTransform(inputImage, rigidResampler->GetOutput()); // (fixedImage, movingImage)
+    DeformableTransformType::Pointer deformableTransform = getDeformableRegistrationTransform(rigidResampler->GetOutput(), inputImage); // (movingImage, fixedImage)
 
     ResampleFilterType::Pointer deformableResampler = ResampleFilterType::New();
     deformableResampler->SetTransform(deformableTransform);
@@ -330,7 +331,7 @@ RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inp
     }
     optimizer->SetScales(optimizerScales);
 
-    // These metrics determine when the optimizer will terminate registration
+    // These parameters determine when the optimizer will terminate registration
     optimizer->SetMaximumStepLength(0.1);
     optimizer->SetMinimumStepLength(0.001);
     optimizer->SetNumberOfIterations(200);
@@ -365,7 +366,7 @@ RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inp
 
 DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::Pointer movingImage, ImageType::Pointer fixedImage){
     typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
-    typedef itk::MattesMutualInformationImageToImageMetric<ImageType, ImageType> MetricType;
+    typedef itk::MeanSquaresImageToImageMetric<ImageType, ImageType> MetricType;
     typedef itk::LinearInterpolateImageFunction<ImageType, double> InterpolatorType;
     typedef itk::ImageRegistrationMethod<ImageType, ImageType> RegistrationType;
     typedef DeformableTransformType::ParametersType ParametersType;
@@ -393,10 +394,10 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
     DeformableTransformType::MeshSizeType meshSize;
     DeformableTransformType::OriginType fixedOrigin = fixedImage->GetOrigin();
     ImageType::SizeType fixedImageSize = fixedImage->GetLargestPossibleRegion().GetSize();
-    unsigned int numberOfGridNodesInOneDimension = 8;
+    unsigned int numberOfGridNodesInOneDimension = 12;
 
     for (int i = 0; i < 2; i++) {
-        fixedPhysicalDimensions[i] = (fixedImageSize[i] - 1) * fixedImage->GetSpacing()[i];
+        fixedPhysicalDimensions[i] = (fixedImageSize[i] - 2) * fixedImage->GetSpacing()[i];
     }
     meshSize.Fill(numberOfGridNodesInOneDimension - BSplineOrder);
 
@@ -414,7 +415,7 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
     registration->SetInitialTransformParameters(transform->GetParameters());
 
     // Specify the optimizer parameters
-    optimizer->MinimizeOn();
+    optimizer->MaximizeOff();
     optimizer->SetMaximumStepLength(10.0);
     optimizer->SetMinimumStepLength(0.001);
     optimizer->SetRelaxationFactor(0.7);
@@ -422,12 +423,6 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
 
     BSplineTransformIterationUpdate::Pointer observer = BSplineTransformIterationUpdate::New();
     optimizer->AddObserver(itk::IterationEvent(), observer);
-
-    const unsigned int numberOfSamples = static_cast<unsigned int>(fixedImage->GetLargestPossibleRegion().GetNumberOfPixels() * 0.8);
-    metric->SetNumberOfHistogramBins(100);
-    metric->SetNumberOfSpatialSamples(numberOfSamples);
-    metric->SetTransform(transform);
-    metric->SetInterpolator(interpolator);
 
     // Prepare time and memory probes
     itk::TimeProbesCollectorBase chronometer;
