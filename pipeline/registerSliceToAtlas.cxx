@@ -243,11 +243,11 @@ RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inp
     typedef itk::CenteredTransformInitializer<RigidTransformType, ImageType, ImageType> TransformInitializerType;
 
     // Instantiate the metric, optimizer, interpolator and registration objects
-    MetricType::Pointer         metric        = MetricType::New();
-    OptimizerType::Pointer      optimizer     = OptimizerType::New();
-    InterpolatorType::Pointer   interpolator  = InterpolatorType::New();
-    RigidTransformType::Pointer      transform     = RigidTransformType::New();
-    RegistrationType::Pointer   registration  = RegistrationType::New();
+    MetricType::Pointer           metric        = MetricType::New();
+    OptimizerType::Pointer        optimizer     = OptimizerType::New();
+    InterpolatorType::Pointer     interpolator  = InterpolatorType::New();
+    RigidTransformType::Pointer   transform     = RigidTransformType::New();
+    RegistrationType::Pointer     registration  = RegistrationType::New();
 
     // Set up the registration
     registration->SetMetric(metric);
@@ -355,7 +355,7 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
     unsigned int numberOfGridNodesInOneDimension = 8;
 
     for (int i = 0; i < 2; i++) {
-        fixedPhysicalDimensions[i] = fixedImageSize[i] * fixedImage->GetSpacing()[i];
+        fixedPhysicalDimensions[i] = (fixedImageSize[i] - 1) * fixedImage->GetSpacing()[i];
     }
 
     meshSize.Fill(numberOfGridNodesInOneDimension - BSplineOrder);
