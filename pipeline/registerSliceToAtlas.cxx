@@ -13,7 +13,7 @@
 #include "itkResampleImageFilter.h"
 
 #include "itkBSplineTransform.h"
-#include "itkLBFGSOptimizer.h"
+#include "itkMattesMutualInformationImageToImageMetric.h"
 
 #include "itkPermuteAxesImageFilter.h"
 
@@ -73,6 +73,41 @@ public:
     }
 };
 
+class BSplineTransformIterationUpdate : public itk::Command
+{
+public:
+  typedef  BSplineTransformIterationUpdate   Self;
+  typedef  itk::Command             Superclass;
+  typedef itk::SmartPointer<Self>   Pointer;
+  itkNewMacro( Self );
+
+protected:
+  BSplineTransformIterationUpdate() {};
+
+public:
+  typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
+  typedef   const OptimizerType *                  OptimizerPointer;
+
+  void Execute(itk::Object *caller, const itk::EventObject & event)
+    {
+    Execute( (const itk::Object *)caller, event);
+    }
+
+  void Execute(const itk::Object * object, const itk::EventObject & event)
+    {
+    OptimizerPointer optimizer =
+      dynamic_cast< OptimizerPointer >( object );
+    if( !(itk::IterationEvent().CheckEvent( &event )) )
+      {
+      return;
+      }
+    std::cout << "Iteration : ";
+    std::cout << optimizer->GetCurrentIteration() << "   ";
+    std::cout << optimizer->GetValue() << "   ";
+    std::cout << std::endl;
+    }
+};
+
 int main(int argc, char *argv[]){
     //Check args
     if (argc < 4) {
@@ -91,7 +126,12 @@ int main(int argc, char *argv[]){
     
 
     // Get corresponding atlas slice
-    ImageType::Pointer atlasSlice = getCoronalAtlasSlice(atoi(argv[2]));
+    //ImageType::Pointer atlasSlice = getCoronalAtlasSlice(atoi(argv[2]));
+
+    ReaderType::Pointer atlasReader = ReaderType::New();
+    atlasReader->SetFileName(argv[2]);
+    atlasReader->Update();
+    ImageType::Pointer atlasSlice = atlasReader->GetOutput();
 
     // Load the input image
     ReaderType::Pointer inputReader = ReaderType::New();
@@ -104,6 +144,7 @@ int main(int argc, char *argv[]){
     spacing[0] = 25.7764;
     spacing[1] = 25.7764;
     inputImage->SetSpacing(spacing);
+    atlasSlice->SetSpacing(spacing);
     atlasSlice->SetDirection(inputImage->GetDirection());
 
     // Save the slice locally, until I feel more confident
@@ -127,7 +168,7 @@ int main(int argc, char *argv[]){
     rigidResampler->Update();
 
     // Compute a deformable registration transform using the resampled atlas slice and the input image
-    DeformableTransformType::Pointer deformableTransform = getDeformableRegistrationTransform(rigidResampler->GetOutput(), inputImage); // (fixedImage, movingImage)
+    DeformableTransformType::Pointer deformableTransform = getDeformableRegistrationTransform(inputImage, rigidResampler->GetOutput()); // (fixedImage, movingImage)
 
     ResampleFilterType::Pointer deformableResampler = ResampleFilterType::New();
     deformableResampler->SetTransform(deformableTransform);
@@ -323,8 +364,8 @@ RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inp
 }
 
 DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::Pointer movingImage, ImageType::Pointer fixedImage){
-    typedef itk::LBFGSOptimizer OptimizerType;
-    typedef itk::MeanSquaresImageToImageMetric<ImageType, ImageType> MetricType;
+    typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
+    typedef itk::MattesMutualInformationImageToImageMetric<ImageType, ImageType> MetricType;
     typedef itk::LinearInterpolateImageFunction<ImageType, double> InterpolatorType;
     typedef itk::ImageRegistrationMethod<ImageType, ImageType> RegistrationType;
     typedef DeformableTransformType::ParametersType ParametersType;
@@ -357,7 +398,6 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
     for (int i = 0; i < 2; i++) {
         fixedPhysicalDimensions[i] = (fixedImageSize[i] - 1) * fixedImage->GetSpacing()[i];
     }
-
     meshSize.Fill(numberOfGridNodesInOneDimension - BSplineOrder);
 
     // Define the transform domain
@@ -374,11 +414,20 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
     registration->SetInitialTransformParameters(transform->GetParameters());
 
     // Specify the optimizer parameters
-    optimizer->SetGradientConvergenceTolerance(0.05);
-    optimizer->SetLineSearchAccuracy(0.9);
-    optimizer->SetDefaultStepLength(1.5);
-    optimizer->TraceOn();
-    optimizer->SetMaximumNumberOfFunctionEvaluations(1000);
+    optimizer->MinimizeOn();
+    optimizer->SetMaximumStepLength(10.0);
+    optimizer->SetMinimumStepLength(0.001);
+    optimizer->SetRelaxationFactor(0.7);
+    optimizer->SetNumberOfIterations(200);
+
+    BSplineTransformIterationUpdate::Pointer observer = BSplineTransformIterationUpdate::New();
+    optimizer->AddObserver(itk::IterationEvent(), observer);
+
+    const unsigned int numberOfSamples = static_cast<unsigned int>(fixedImage->GetLargestPossibleRegion().GetNumberOfPixels() * 0.8);
+    metric->SetNumberOfHistogramBins(100);
+    metric->SetNumberOfSpatialSamples(numberOfSamples);
+    metric->SetTransform(transform);
+    metric->SetInterpolator(interpolator);
 
     // Prepare time and memory probes
     itk::TimeProbesCollectorBase chronometer;
