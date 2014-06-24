@@ -13,7 +13,8 @@
 #include "itkResampleImageFilter.h"
 
 #include "itkBSplineTransform.h"
-#include "itkMattesMutualInformationImageToImageMetric.h"
+#include "itkCombinedImageToImageMetricAdaptor.h"
+#include "itkNormalizedCorrelationImageToImageMetric.h"
 
 #include "itkPermuteAxesImageFilter.h"
 
@@ -33,7 +34,7 @@ typedef itk::BSplineTransform<double, 2, BSplineOrder> DeformableTransformType; 
 ImageType::Pointer getCoronalAtlasSlice(int);
 ImageType::Pointer rotateImage(ImageType::Pointer);
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
-DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
+DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::Pointer, ImageType::Pointer, ImageType::Pointer, ImageType::Pointer);
 double degreesToRadians(double);
 void writeImage(ImageType::Pointer, const char *);
 void displayRegistrationResults(itk::OptimizerParameters<double>, const unsigned int, const double);
@@ -110,10 +111,11 @@ public:
 
 int main(int argc, char *argv[]){
     //Check args
-    if (argc < 4) {
+    if (argc < 6) {
             std::cerr << "Missing Parameters " << std::endl;
             std::cerr << "Usage: " << argv[0];
-            std::cerr << " sliceToRegisterPath anteriorPosteriorCoorinate";
+            std::cerr << " fixedImagePath movingImagePath";
+            std::cerr << " fixedMaskPath movingMaskPath";
             std::cerr << " outputPath";
             return EXIT_FAILURE;
     }
@@ -138,6 +140,17 @@ int main(int argc, char *argv[]){
     inputReader->SetFileName(argv[1]);
     inputReader->Update();
     ImageType::Pointer inputImage = inputReader->GetOutput();
+
+    // Load the masks
+    ReaderType::Pointer fixedMaskReader = ReaderType::New();
+    fixedMaskReader->SetFileName(argv[3]);
+    fixedMaskReader->Update();
+    ImageType::Pointer fixedMask = fixedMaskReader->GetOutput();
+
+    ReaderType::Pointer movingMaskReader = ReaderType::New();
+    movingMaskReader->SetFileName(argv[4]);
+    movingMaskReader->Update();
+    ImageType::Pointer movingMask = movingMaskReader->GetOutput();
 
     // Set the input spacing and atlas direction
     ImageType::SpacingType spacing;
@@ -169,7 +182,7 @@ int main(int argc, char *argv[]){
     writeImage(rigidResampler->GetOutput(), "/home/sam/afterRigidRegistration.jpg");
 
     // Compute a deformable registration transform using the resampled atlas slice and the input image
-    DeformableTransformType::Pointer deformableTransform = getDeformableRegistrationTransform(rigidResampler->GetOutput(), inputImage); // (movingImage, fixedImage)
+    DeformableTransformType::Pointer deformableTransform = getDeformableRegistrationTransform(rigidResampler->GetOutput(), inputImage, movingMask, fixedMask); // (movingImage, fixedImage)
 
     ResampleFilterType::Pointer deformableResampler = ResampleFilterType::New();
     deformableResampler->SetTransform(deformableTransform);
@@ -364,22 +377,24 @@ RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inp
     return registrationTransform;
 }
 
-DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::Pointer movingImage, ImageType::Pointer fixedImage){
+DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::Pointer movingImage, ImageType::Pointer fixedImage, ImageType::Pointer movingMask, ImageType::Pointer fixedMask){
     typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
-    typedef itk::MeanSquaresImageToImageMetric<ImageType, ImageType> MetricType;
+    typedef itk::NormalizedCorrelationImageToImageMetric<ImageType, ImageType> NormalizedCorrelationMetricType;
+    typedef itk::MeanSquaresImageToImageMetric<ImageType, ImageType> MeansSquaredMetricType;
+    typedef itk::CombinedImageToImageMetricAdaptor<ImageType, ImageType> CombinedMetricType;
     typedef itk::LinearInterpolateImageFunction<ImageType, double> InterpolatorType;
     typedef itk::ImageRegistrationMethod<ImageType, ImageType> RegistrationType;
     typedef DeformableTransformType::ParametersType ParametersType;
 
     // Instantiate the metric, optimizer, interpolator, transform and registration objects
-    MetricType::Pointer metric = MetricType::New();
+    CombinedMetricType::Pointer combinedMetric = CombinedMetricType::New();
     OptimizerType::Pointer optimizer = OptimizerType::New();
     InterpolatorType::Pointer interpolator = InterpolatorType::New();
     RegistrationType::Pointer registration = RegistrationType::New();
     DeformableTransformType::Pointer transform = DeformableTransformType::New();
 
     // Connect everything to the registration object
-    registration->SetMetric(metric);
+    registration->SetMetric(combinedMetric);
     registration->SetOptimizer(optimizer);
     registration->SetInterpolator(interpolator);
     registration->SetTransform(transform);
@@ -406,6 +421,21 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
     transform->SetTransformDomainPhysicalDimensions(fixedPhysicalDimensions);
     transform->SetTransformDomainMeshSize(meshSize);
     transform->SetTransformDomainDirection(fixedImage->GetDirection());
+
+    // Configure the two image metrics
+    // The normalized correlation metric inputs will be taken directly from the registration
+    NormalizedCorrelationMetricType::Pointer normCorrMetric = NormalizedCorrelationMetricType::New();
+
+    // The means squared metric inputs will come from segmented masks
+    MeansSquaredMetricType::Pointer meanSqMetric = MeansSquaredMetricType::New();
+    InterpolatorType::Pointer meanSqInterpolator = InterpolatorType::New(); // Not sure if I need a separate interpolator here
+    meanSqMetric->SetFixedImage(fixedMask);
+    meanSqMetric->SetMovingImage(movingMask);
+    meanSqMetric->SetFixedImageRegion(fixedMask->GetBufferedRegion());
+    meanSqMetric->SetInterpolator(meanSqInterpolator);
+
+    combinedMetric->SetMetric(0, normCorrMetric, 1.0);
+    combinedMetric->SetMetric(1, meanSqMetric, 0.001);
 
     // Set the initial transform parameters
     const unsigned int numberOfParameters = transform->GetNumberOfParameters();
