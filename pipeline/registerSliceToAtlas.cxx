@@ -13,7 +13,7 @@
 #include "itkResampleImageFilter.h"
 
 #include "itkBSplineTransform.h"
-#include "itkMattesMutualInformationImageToImageMetric.h"
+#include "itkNormalizedCorrelationImageToImageMetric.h"
 
 #include "itkPermuteAxesImageFilter.h"
 
@@ -366,7 +366,7 @@ RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inp
 
 DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::Pointer movingImage, ImageType::Pointer fixedImage){
     typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
-    typedef itk::MeanSquaresImageToImageMetric<ImageType, ImageType> MetricType;
+    typedef itk::NormalizedCorrelationImageToImageMetric<ImageType, ImageType> MetricType;
     typedef itk::LinearInterpolateImageFunction<ImageType, double> InterpolatorType;
     typedef itk::ImageRegistrationMethod<ImageType, ImageType> RegistrationType;
     typedef DeformableTransformType::ParametersType ParametersType;
@@ -394,10 +394,10 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
     DeformableTransformType::MeshSizeType meshSize;
     DeformableTransformType::OriginType fixedOrigin = fixedImage->GetOrigin();
     ImageType::SizeType fixedImageSize = fixedImage->GetLargestPossibleRegion().GetSize();
-    unsigned int numberOfGridNodesInOneDimension = 12;
+    unsigned int numberOfGridNodesInOneDimension = 8;
 
     for (int i = 0; i < 2; i++) {
-        fixedPhysicalDimensions[i] = (fixedImageSize[i] - 2) * fixedImage->GetSpacing()[i];
+        fixedPhysicalDimensions[i] = (fixedImageSize[i] - 1) * fixedImage->GetSpacing()[i];
     }
     meshSize.Fill(numberOfGridNodesInOneDimension - BSplineOrder);
 
