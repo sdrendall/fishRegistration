@@ -144,7 +144,10 @@ int main(int argc, char *argv[]){
     spacing[0] = 25.7764;
     spacing[1] = 25.7764;
     inputImage->SetSpacing(spacing);
-    atlasSlice->SetSpacing(spacing);
+    ImageType::SpacingType atlasSpacing;
+    atlasSpacing[0] = 25.0;
+    atlasSpacing[1] = 25.0;
+    atlasSlice->SetSpacing(atlasSpacing);
     atlasSlice->SetDirection(inputImage->GetDirection());
 
     // Save the slice locally, until I feel more confident
@@ -389,15 +392,18 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
     registration->SetMovingImage(movingImage);
     registration->SetFixedImageRegion(fixedImage->GetBufferedRegion());
 
+    // Enable multithreading
+    metric->SetNumberOfThreads(8);
+
     // Calculate image physical dimensions and meshSize
     DeformableTransformType::PhysicalDimensionsType fixedPhysicalDimensions;
     DeformableTransformType::MeshSizeType meshSize;
     DeformableTransformType::OriginType fixedOrigin = fixedImage->GetOrigin();
     ImageType::SizeType fixedImageSize = fixedImage->GetLargestPossibleRegion().GetSize();
-    unsigned int numberOfGridNodesInOneDimension = 8;
+    unsigned int numberOfGridNodesInOneDimension = 18;
 
     for (int i = 0; i < 2; i++) {
-        fixedPhysicalDimensions[i] = (fixedImageSize[i] - 1) * fixedImage->GetSpacing()[i];
+        fixedPhysicalDimensions[i] = (fixedImageSize[i] - 3) * fixedImage->GetSpacing()[i];
     }
     meshSize.Fill(numberOfGridNodesInOneDimension - BSplineOrder);
 
@@ -419,7 +425,7 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
     optimizer->SetMaximumStepLength(10.0);
     optimizer->SetMinimumStepLength(0.001);
     optimizer->SetRelaxationFactor(0.7);
-    optimizer->SetNumberOfIterations(200);
+    optimizer->SetNumberOfIterations(500);
 
     BSplineTransformIterationUpdate::Pointer observer = BSplineTransformIterationUpdate::New();
     optimizer->AddObserver(itk::IterationEvent(), observer);
