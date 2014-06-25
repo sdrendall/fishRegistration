@@ -113,8 +113,8 @@ int main(int argc, char *argv[]){
     if (argc < 4) {
             std::cerr << "Missing Parameters " << std::endl;
             std::cerr << "Usage: " << argv[0];
-            std::cerr << " sliceToRegisterPath anteriorPosteriorCoorinate";
-            std::cerr << " outputPath";
+            std::cerr << " fixedImagePath movingImagePath";
+            std::cerr << " imageToTransformPath outputPath";
             return EXIT_FAILURE;
     }
 
@@ -144,6 +144,8 @@ int main(int argc, char *argv[]){
     spacing[0] = 25.7764;
     spacing[1] = 25.7764;
     inputImage->SetSpacing(spacing);
+    spacing[0] = 25;
+    spacing[1] = 25;
     atlasSlice->SetSpacing(spacing);
     atlasSlice->SetDirection(inputImage->GetDirection());
 
@@ -169,7 +171,7 @@ int main(int argc, char *argv[]){
     writeImage(rigidResampler->GetOutput(), "/home/sam/afterRigidRegistration.jpg");
 
     // Compute a deformable registration transform using the resampled atlas slice and the input image
-    DeformableTransformType::Pointer deformableTransform = getDeformableRegistrationTransform(rigidResampler->GetOutput(), inputImage); // (movingImage, fixedImage)
+    DeformableTransformType::Pointer deformableTransform = getDeformableRegistrationTransform(atlasSlice, inputImage); // (movingImage, fixedImage)
 
     ResampleFilterType::Pointer deformableResampler = ResampleFilterType::New();
     deformableResampler->SetTransform(deformableTransform);
@@ -182,9 +184,14 @@ int main(int argc, char *argv[]){
     deformableResampler->SetOutputDirection(inputImage->GetDirection());
     deformableResampler->SetDefaultPixelValue(0);
 
+    // Pull the tranform image through the entire pipeline
+    ReaderType::Pointer finalReader = ReaderType::New(); 
+    finalReader->SetFileName(argv[3]);
+    deformableResampler->SetInput(finalReader->GetOutput());
+
     // Finally, connect the file writer to write the output file
     WriterType::Pointer outputWriter = WriterType::New();
-    outputWriter->SetFileName(argv[3]);
+    outputWriter->SetFileName(argv[4]);
     outputWriter->SetInput(deformableResampler->GetOutput());
     outputWriter->Update();
 
@@ -417,7 +424,7 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
     // Specify the optimizer parameters
     optimizer->MaximizeOff();
     optimizer->SetMaximumStepLength(10.0);
-    optimizer->SetMinimumStepLength(0.001);
+    optimizer->SetMinimumStepLength(0.1);
     optimizer->SetRelaxationFactor(0.7);
     optimizer->SetNumberOfIterations(200);
 
