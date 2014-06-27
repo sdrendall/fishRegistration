@@ -15,9 +15,12 @@
 #include "itkBSplineTransform.h"
 #include "itkNormalizedCorrelationImageToImageMetric.h"
 
-#include "itkPermuteAxesImageFilter.h"
+#include "itkDemonsRegistrationFilter.h"
+#include "itkHistogramMatchingImageFilter.h"
+#include "itkCastImageFilter.h"
+#include "itkWarpImageFilter.h"
 
-#include "itkExceptionObject.h"
+#include "itkPermuteAxesImageFilter.h"
 
 #include "itkTimeProbesCollectorBase.h"
 #include "itkMemoryProbesCollectorBase.h"
@@ -28,12 +31,13 @@ const unsigned int BSplineOrder = 3;
 
 typedef itk::Image<unsigned char, 2> ImageType;
 typedef itk::CenteredRigid2DTransform<double> RigidTransformType;
-typedef itk::BSplineTransform<double, 2, BSplineOrder> DeformableTransformType; // <CoordinateRepType, Dims, BSplineOrder>
+typedef itk::BSplineTransform<double, 2, BSplineOrder> BSplineTransformType; // <CoordinateRepType, Dims, BSplineOrder>
 
 ImageType::Pointer getCoronalAtlasSlice(int);
 ImageType::Pointer rotateImage(ImageType::Pointer);
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
-DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
+BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer, ImageType::Pointer);
+
 double degreesToRadians(double);
 void writeImage(ImageType::Pointer, const char *);
 void displayRegistrationResults(itk::OptimizerParameters<double>, const unsigned int, const double);
@@ -172,7 +176,7 @@ int main(int argc, char *argv[]){
     writeImage(rigidResampler->GetOutput(), "/home/sam/afterRigidRegistration.jpg");
 
     // Compute a deformable registration transform using the resampled atlas slice and the input image
-    DeformableTransformType::Pointer deformableTransform = getDeformableRegistrationTransform(rigidResampler->GetOutput(), inputImage); // (movingImage, fixedImage)
+    BSplineTransformType::Pointer deformableTransform = getBSPlineRegistrationResults(rigidResampler->GetOutput(), inputImage); // (movingImage, fixedImage)
 
     ResampleFilterType::Pointer deformableResampler = ResampleFilterType::New();
     deformableResampler->SetTransform(deformableTransform);
@@ -367,19 +371,19 @@ RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inp
     return registrationTransform;
 }
 
-DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::Pointer movingImage, ImageType::Pointer fixedImage){
+BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer movingImage, ImageType::Pointer fixedImage){
     typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
     typedef itk::NormalizedCorrelationImageToImageMetric<ImageType, ImageType> MetricType;
     typedef itk::LinearInterpolateImageFunction<ImageType, double> InterpolatorType;
     typedef itk::ImageRegistrationMethod<ImageType, ImageType> RegistrationType;
-    typedef DeformableTransformType::ParametersType ParametersType;
+    typedef BSplineTransformType::ParametersType ParametersType;
 
     // Instantiate the metric, optimizer, interpolator, transform and registration objects
     MetricType::Pointer metric = MetricType::New();
     OptimizerType::Pointer optimizer = OptimizerType::New();
     InterpolatorType::Pointer interpolator = InterpolatorType::New();
     RegistrationType::Pointer registration = RegistrationType::New();
-    DeformableTransformType::Pointer transform = DeformableTransformType::New();
+    BSplineTransformType::Pointer transform = BSplineTransformType::New();
 
     // Connect everything to the registration object
     registration->SetMetric(metric);
@@ -392,18 +396,18 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
     registration->SetMovingImage(movingImage);
     registration->SetFixedImageRegion(fixedImage->GetBufferedRegion());
 
-    // Enable multithreading
+    // Enable multithreading - apparently this doesn't work...
     metric->SetNumberOfThreads(8);
 
     // Calculate image physical dimensions and meshSize
-    DeformableTransformType::PhysicalDimensionsType fixedPhysicalDimensions;
-    DeformableTransformType::MeshSizeType meshSize;
-    DeformableTransformType::OriginType fixedOrigin = fixedImage->GetOrigin();
+    BSplineTransformType::PhysicalDimensionsType fixedPhysicalDimensions;
+    BSplineTransformType::MeshSizeType meshSize;
+    BSplineTransformType::OriginType fixedOrigin = fixedImage->GetOrigin();
     ImageType::SizeType fixedImageSize = fixedImage->GetLargestPossibleRegion().GetSize();
-    unsigned int numberOfGridNodesInOneDimension = 18;
+    unsigned int numberOfGridNodesInOneDimension = 8;
 
     for (int i = 0; i < 2; i++) {
-        fixedPhysicalDimensions[i] = (fixedImageSize[i] - 3) * fixedImage->GetSpacing()[i];
+        fixedPhysicalDimensions[i] = (fixedImageSize[i] - 1) * fixedImage->GetSpacing()[i];
     }
     meshSize.Fill(numberOfGridNodesInOneDimension - BSplineOrder);
 
@@ -422,10 +426,10 @@ DeformableTransformType::Pointer getDeformableRegistrationTransform(ImageType::P
 
     // Specify the optimizer parameters
     optimizer->MaximizeOff();
-    optimizer->SetMaximumStepLength(10.0);
+    optimizer->SetMaximumStepLength(25.0);
     optimizer->SetMinimumStepLength(0.001);
     optimizer->SetRelaxationFactor(0.7);
-    optimizer->SetNumberOfIterations(500);
+    optimizer->SetNumberOfIterations(200);
 
     BSplineTransformIterationUpdate::Pointer observer = BSplineTransformIterationUpdate::New();
     optimizer->AddObserver(itk::IterationEvent(), observer);
