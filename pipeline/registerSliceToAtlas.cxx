@@ -33,10 +33,16 @@ typedef itk::Image<unsigned char, 2> ImageType;
 typedef itk::CenteredRigid2DTransform<double> RigidTransformType;
 typedef itk::BSplineTransform<double, 2, BSplineOrder> BSplineTransformType; // <CoordinateRepType, Dims, BSplineOrder>
 
+// Types for the demons registration
+typedef itk::Vector<float, 2> DisplacementPixelType;
+typedef itk::Image<DisplacementPixelType, 2> DisplacementFieldType;
+
+// Function Declarations
 ImageType::Pointer getCoronalAtlasSlice(int);
 ImageType::Pointer rotateImage(ImageType::Pointer);
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
 BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer, ImageType::Pointer);
+DisplacementFieldType::Pointer getDemonsDisplacementField(ImageType::Pointer, ImageType::Pointer);
 
 double degreesToRadians(double);
 void writeImage(ImageType::Pointer, const char *);
@@ -112,6 +118,44 @@ public:
     }
 };
 
+  class DemonsIterationUpdate : public itk::Command
+  {
+  public:
+    typedef  DemonsIterationUpdate                     Self;
+    typedef  itk::Command                               Superclass;
+    typedef  itk::SmartPointer<DemonsIterationUpdate>  Pointer;
+    itkNewMacro( DemonsIterationUpdate );
+  protected:
+    DemonsIterationUpdate() {};
+
+    typedef itk::Image< float, 2 >            InternalImageType;
+    typedef itk::Vector< float, 2 >           VectorPixelType;
+    typedef itk::Image<  VectorPixelType, 2 > DisplacementFieldType;
+
+    typedef itk::DemonsRegistrationFilter<
+                                InternalImageType,
+                                InternalImageType,
+                                DisplacementFieldType>   RegistrationFilterType;
+
+  public:
+
+    void Execute(itk::Object *caller, const itk::EventObject & event)
+      {
+        Execute( (const itk::Object *)caller, event);
+      }
+
+    void Execute(const itk::Object * object, const itk::EventObject & event)
+      {
+         const RegistrationFilterType * filter =
+          dynamic_cast< const RegistrationFilterType * >( object );
+        if( !(itk::IterationEvent().CheckEvent( &event )) )
+          {
+          return;
+          }
+        std::cout << filter->GetMetric() << std::endl;
+      }
+  };
+
 int main(int argc, char *argv[]){
     //Check args
     if (argc < 4) {
@@ -130,12 +174,7 @@ int main(int argc, char *argv[]){
     
 
     // Get corresponding atlas slice
-    //ImageType::Pointer atlasSlice = getCoronalAtlasSlice(atoi(argv[2]));
-
-    ReaderType::Pointer atlasReader = ReaderType::New();
-    atlasReader->SetFileName(argv[2]);
-    atlasReader->Update();
-    ImageType::Pointer atlasSlice = atlasReader->GetOutput();
+    ImageType::Pointer atlasSlice = getCoronalAtlasSlice(atoi(argv[2]));
 
     // Load the input image
     ReaderType::Pointer inputReader = ReaderType::New();
@@ -463,6 +502,49 @@ BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer m
 
     transform->SetParameters(finalParameters);
     return transform;
+}
+
+DisplacementFieldType::Pointer getDemonsDisplacementField(ImageType::Pointer movingImage, ImageType::Pointer fixedImage) {
+    typedef itk::Image<float, 2> InternalImageType;
+    typedef itk::CastImageFilter<ImageType, InternalImageType> ImageCasterType;
+    typedef itk::HistogramMatchingImageFilter<InternalImageType, InternalImageType> MatchingFilterType;
+    typedef itk::DemonsRegistrationFilter<InternalImageType, InternalImageType, DisplacementFieldType> DemonsFilterType;
+
+    // Instantiate casters to cast from input image types to the internal image type
+    ImageCasterType::Pointer movingCaster = ImageCasterType::New();
+    ImageCasterType::Pointer fixedCaster = ImageCasterType::New();
+
+    // Create a histogram matcher, and feed it the caster outputs
+    MatchingFilterType::Pointer matcher = MatchingFilterType::New();
+    matcher->SetInput(movingCaster->GetOutput());
+    matcher->SetReferenceImage(fixedCaster->GetOutput());
+
+    // Set matcher parameters
+    matcher->SetNumberOfHistogramLevels(1024);
+    matcher->SetNumberOfMatchPoints(7);
+    // Simple, built in segmentation
+    matcher->ThresholdAtMeanIntensityOn();
+
+    // Create the demons registration filter
+    DemonsFilterType::Pointer filter = DemonsFilterType::New();
+
+    // Set filter parameters
+    filter->SetFixedImage(fixedCaster->GetOutput());
+    filter->SetMovingImage(matcher->GetOutput());
+
+    filter->SetNumberOfIterations(50);
+    filter->SetStandardDeviations(1);
+
+    // Add an observer
+    DemonsIterationUpdate::Pointer observer = DemonsIterationUpdate::New();
+    filter->AddObserver(itk::IterationEvent(), observer);
+
+    // Start registration
+    filter->Update();
+
+    // Return output
+    DisplacementFieldType::Pointer outputField = filter->GetOutput();
+    return outputField;
 }
 
 void writeImage(ImageType::Pointer im, const char * path) {
