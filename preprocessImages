@@ -1,0 +1,84 @@
+#! /usr/bin/python
+
+from sys import argv
+import subprocess as sp
+import os, json, glob
+
+def checkArgs(args):
+    if len(args) < 2:
+        print "Please specifiy path to images!"
+        printProperUsage()
+        return False
+    elif len(args) > 3:
+        print "Too many input arguments!"
+        printProperUsage()
+        return False
+    if len(args) == 3:
+        if not os.path.exists(os.path.dirname(args[2])):
+            print "Specified tempDataPath does not exist!"
+            return False
+    if not os.path.exists(os.path.dirname(args[1])):
+        print "Specified pathToImages does not exist!"
+        return False
+    return True
+
+def printProperUsage():
+    print "Proper Usage:"
+    print "%s pathToImages [tempDataPath]" % argv[0]
+
+def expandArgPaths():
+    for i in range(1, len(argv)):
+        argv[i] = os.path.expanduser(argv[i])
+
+def createDataDirectory():
+    if len(argv) == 3:
+        dirPath = argv[2]
+    else:
+        dirPath = os.path.join(os.path.dirname(argv[1]), 'regTmp')
+    ensureDir(dirPath)
+    return dirPath
+
+def ensureDir(dirPath):
+    if not os.path.exists(dirPath):
+        os.mkdir(dirPath)
+
+def createJsonFile(dirPath, imagePath):
+    jsonPath = os.path.join(dirPath, 'data.json')
+    jsonFile = open(jsonPath, 'w')
+    populateJsonFile(jsonFile, imagePath)
+    jsonFile.close()
+    return jsonPath
+
+def populateJsonFile(j, imagePath):
+    dictList = []
+    for filepath in glob.glob(imagePath):
+        if filepath.endswith('.vsi'):
+            imDict = {'vsiPath': filepath}
+            dictList.append(imDict)
+    json.dump(dictList, j)
+
+def main():
+    # Call os.path.expanduser() for each input path
+    expandArgPaths()
+    argsValid = checkArgs(argv)
+    if not argsValid:
+        return
+
+    # Load filenames, and create the json file and the containing directory
+    pathToImages = argv[1]
+    dirPath = createDataDirectory()
+    jsonPath = createJsonFile(dirPath, pathToImages)
+
+    # Call the matlab preprocessing function
+    #  Some ugly quotation workarounds
+    argStr = 'matlab -nosplash -nodesktop -r "{}"'.format("downsampleAndSegmentVsis('{}')".format(jsonPath)) 
+    print "argStr: " + argStr
+    sp.call(argStr, shell=True)
+
+    print "Preprocessing Complete!"
+    print "tmpPath:", dirPath
+    print "jsonPath:", jsonPath
+    
+
+if __name__ == "__main__":
+    main()

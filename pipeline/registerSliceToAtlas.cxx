@@ -396,9 +396,6 @@ BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer m
     registration->SetMovingImage(movingImage);
     registration->SetFixedImageRegion(fixedImage->GetBufferedRegion());
 
-    // Enable multithreading - apparently this doesn't work...
-    metric->SetNumberOfThreads(8);
-
     // Calculate image physical dimensions and meshSize
     BSplineTransformType::PhysicalDimensionsType fixedPhysicalDimensions;
     BSplineTransformType::MeshSizeType meshSize;

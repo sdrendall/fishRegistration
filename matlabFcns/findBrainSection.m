@@ -2,25 +2,21 @@ function mask = findBrainSection(im)
     %% mask = findBrainSection(im)
     % 
     % Returns a binary mask of the brain section in im
+    im = mat2gray(im);
 
     %% Downsample im
+    disp('Downsampling and low pass filtering image.....')
     scaleFactor = .02;
     sIm = imresize(im, scaleFactor);
 
-    %% Lowpass Filter
-    %sIm = imfilter(sIm, fspecial('disk', 10));
-    %debugShow(sIm, 'smoothed')
-
-    %% "Background Subtract"
-    %sIm = hackyBackgroundSubtract(sIm)
-    %debugShow(sIm, '"Subtracted Background"')
-
     %% Segment Brain section
-    thresh = graythresh(sIm(:));
+    disp('Binarizing image.....')
+    thresh = graythresh(sIm(sIm ~= 0));
     mask = im2bw(sIm, thresh);
     %debugShow(mask, 'raw mask')
 
     %% Close
+    disp('Cleaning binary image.....')
     mask = imclose(mask, strel('disk', 6));
     %debugShow(mask, 'closed')
 
@@ -33,6 +29,7 @@ function mask = findBrainSection(im)
     %debugShow(mask, 'after erosion')
 
     %% Get largest object
+    disp('Choosing brain segment.....')
     mask = getLargest(mask);
     %debugShow(mask, 'largest');
 
@@ -41,6 +38,7 @@ function mask = findBrainSection(im)
     %debugShow(mask, 'dilated')
 
     %% Resize
+    disp('Resizing binary image.....')
     mask = imresize(mask, size(im));
     %debugShow(mask, 'final')
 
