@@ -33,6 +33,7 @@ typedef itk::Image<unsigned char, 2> ImageType;
 typedef itk::CenteredRigid2DTransform<double> RigidTransformType;
 typedef itk::BSplineTransform<double, 2, BSplineOrder> BSplineTransformType; // <CoordinateRepType, Dims, BSplineOrder>
 
+// Function Declarations
 ImageType::Pointer getCoronalAtlasSlice(int);
 ImageType::Pointer rotateImage(ImageType::Pointer);
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
