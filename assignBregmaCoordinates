@@ -1,0 +1,4 @@
+#!/bin/bash
+
+matlab -nosplash -nodesktop -r "assignBregmaCoordinates('$1')"
+echo "Bregma Coordinates Assigned!"

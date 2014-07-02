@@ -76,8 +76,8 @@ def main():
     sp.call(argStr, shell=True)
 
     print "Preprocessing Complete!"
-    print "tmpPath:", dirPath
-    print "jsonPath:", jsonPath
+    print "Experiment Path:", dirPath
+    print "JSON Path:", jsonPath
     
 
 if __name__ == "__main__":
