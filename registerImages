@@ -1,37 +1,115 @@
 #!/usr/bin/python
 
-import os, json
+import os, json, sys
+import subprocess as sp
 from sys import argv
 
+def checkArgs():
+    if len(argv) > 2:
+        print "Too many input arguments!"
+        printProperUsage()
+        return False
+    elif len(argv) == 2 and not os.path.isdir(os.path.abspath(argv[1])):
+        print "Specified experimentPath does not exist!"
+        printProperUsage()
+        return False
+    return True
+
+def printProperUsage():
+    print "Proper Usage:"
+    print "%s [experimentPath]" % argv[0]
+
 def getExperimentPath():
-    isntDir = lambda p: not os.path.exists(os.path.dirname(path))
-    if len(argv) < 2 or isntDir(argv[1]):
-        return '.'
+    if len(argv) == 2:
+        return os.path.abspath(argv[1])
     else:
-        return os.path.expanduser(argv[1])
+        return os.path.abspath('.')
 
-def generateJsonPath(path):
-    return os.path.join(path, '.metadata.json')
+def generateJsonPath(expPath):
+    return os.path.join(expPath, '.registrationData' ,'metadata.json')
 
-def isInvalidExperimentPath(path):
-    jsonPath = generateJsonPath(path)
-    if not os.path.exists(jsonPath):
+def isInvalidExperimentPath(expPath):
+    jsonPath = generateJsonPath(expPath)
+    if not os.path.isfile(jsonPath):
         print "%s not found!" % jsonPath
         return True
     else:
         return False
 
+def generateArgString(imdata):
+    imdata['registeredAtlasReferenceImagePath'] = generateReferenceImagePath(imdata['downsampledImagePath'])
+    imdata['registeredAtlasLabelsPath'] = generateLabelsPath(imdata['downsampledImagePath']) 
+    return 'registerSliceToAtlas {downsampledImagePath} {atlasCoord} \
+        {registeredAtlasReferenceImagePath} {registeredAtlasLabelsPath}'.format(**imdata)
+
+def registerImage(imdata, expPath):
+    imdata['atlasCoord'] = bregmaToAtlas(imdata['bregmaCoord'])
+    argStr = generateArgString(imdata)
+
+    try:
+        print "Registering %s......" % imdata['downsampledImagePath']
+        sp.check_output(argStr, shell=True, cwd=expPath, env=os.environ)
+    except sp.CalledProcessError as e:
+        print "Registration failed for %s!" % imdata['downsampledImagePath']
+        print "registerSliceToAtlas returned with return code: %r" % e.returncode
+        print "Output: %s" % e.output
+        imdata['registrationSuccessful'] = False
+    else:
+        imdata['registrationSuccessful'] = True
+
+def bregmaToAtlas(bCoord):
+    bregmaInAtlas = 5525 # in um
+    bCoord = mm2um(float(bCoord))
+    return bregmaInAtlas - bCoord
+
+def mm2um(mm):
+    return mm*1000
+
+def generateReferenceImagePath(downsampledImagePath):
+    outputPath = downsampledImagePath.split('.')[-1] #remove suffix
+    outputPath += '_registeredAtlasReferenceImage.png'
+    return outputPath
+
+def generateLabelsPath(downsampledImagePath):
+    outputPath = downsampledImagePath.split('.')[-1] #remove suffix
+    outputPath += '_registeredAtlasLabels.png'
+    return outputPath
+
+def loadJson(jsonPath):
+    jsonFile = open(jsonPath)
+    dictList = json.load(jsonFile)
+    jsonFile.close()
+    return dictList
+
+def updateJson(jsonPath, dictList):
+    jsonFile = open(jsonPath, 'w')
+    json.dump(dictList, jsonFile)
+    jsonFile.close()
+
+
 def main():
+    argsValid = checkArgs()
+    if not argsValid:
+        return
     # Load experiment path
     expPath = getExperimentPath()
     if isInvalidExperimentPath(expPath):
         print "Invalid Experiment Path:"
         print expPath
         return
+
     # Load JSON
     jsonPath = generateJsonPath(expPath)
-    dictList = json.load(jsonPath)
+    dictList = loadJson(jsonPath)
 
-    # Run registration pipeline
+    # Lists and dicts are mutable so they will be modified in place
+    for imdata in dictList:
+        # Run registration pipeline
+        registerImage(imdata, expPath)
+        # Update JSON file
+        updateJson(jsonPath, dictList)
 
-    # 
+    print 'Registration complete!'
+
+if __name__ == '__main__':
+    main()

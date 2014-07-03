@@ -4,78 +4,82 @@ from sys import argv
 import subprocess as sp
 import os, json, glob
 
-def checkArgs(args):
-    if len(args) < 2:
-        print "Please specifiy path to images!"
-        printProperUsage()
-        return False
-    elif len(args) > 3:
+def checkArgs():
+    if len(argv) < 2:
+        print "Running with current directory as root experiment directory!"
+    elif len(argv) > 2:
         print "Too many input arguments!"
         printProperUsage()
         return False
-    if len(args) == 3:
-        if not os.path.exists(os.path.dirname(args[2])):
-            print "Specified tempDataPath does not exist!"
-            return False
-    if not os.path.exists(os.path.dirname(args[1])):
-        print "Specified pathToImages does not exist!"
+    elif not os.path.isdir(os.path.abspath(argv[1])):
+        print "Specified experimentPath does not exist!"
+        printProperUsage()
         return False
     return True
 
 def printProperUsage():
     print "Proper Usage:"
-    print "%s pathToImages [tempDataPath]" % argv[0]
+    print "%s [experimentPath]" % argv[0]
 
-def expandArgPaths():
-    for i in range(1, len(argv)):
-        argv[i] = os.path.expanduser(argv[i])
-
-def createDataDirectory():
-    if len(argv) == 3:
-        dirPath = argv[2]
+def getExperimentPath():
+    if len(argv) == 2:
+        return os.path.abspath(argv[1])
     else:
-        dirPath = os.path.join(os.path.dirname(argv[1]), 'regTmp')
-    ensureDir(dirPath)
-    return dirPath
+        return os.path.abspath('.')
+
+def createDataDirectory(expPath):
+    dataPath = os.path.join(expPath, '.registrationData')
+    ensureDir(dataPath)
+    return dataPath
 
 def ensureDir(dirPath):
     if not os.path.exists(dirPath):
         os.mkdir(dirPath)
+    elif not os.path.isdir(dirPath):
+        print "Warning! Non-directory file exists at:\n\t%s" % dirPath
 
-def createJsonFile(dirPath, imagePath):
-    jsonPath = os.path.join(dirPath, '.metadata.json')
+def createJsonFile(dataPath, imagePath):
+    jsonPath = os.path.join(dataPath, 'metadata.json')
     jsonFile = open(jsonPath, 'w')
-    populateJsonFile(jsonFile, imagePath)
-    jsonFile.close()
-    return jsonPath
+    return jsonFile, jsonPath
 
-def populateJsonFile(j, imagePath):
-    dictList = []
-    for filepath in glob.glob(imagePath):
-        if filepath.endswith('.vsi'):
-            imDict = {'vsiPath': filepath}
+def populateJsonFile(j, vsiPaths):
+    dictList = list()
+    for vsiPath in vsiPaths:
+            imDict = {'vsiPath': vsiPath}
             dictList.append(imDict)
     json.dump(dictList, j)
 
+def findVsis(expPath):
+    vsiPaths = list()
+    for root, dirs, files in os.walk(expPath):
+        for filename in files:
+            if filename.endswith('.vsi'):
+                fullPath = os.path.join(root, filename)
+                relPath = os.path.relpath(fullPath, expPath)
+                vsiPaths.append(relPath)
+    return vsiPaths
+
 def main():
-    # Call os.path.expanduser() for each input path
-    expandArgPaths()
-    argsValid = checkArgs(argv)
+    argsValid = checkArgs()
     if not argsValid:
         return
     # Load filenames, and create the json file and the containing directory
-    pathToImages = argv[1]
-    dirPath = createDataDirectory()
-    jsonPath = createJsonFile(dirPath, pathToImages)
+    experimentPath = getExperimentPath()
+    dataPath = createDataDirectory(experimentPath)
+    vsiPaths = findVsis(experimentPath)
+    jsonFile, jsonPath = createJsonFile(dataPath, vsiPaths)
+    populateJsonFile(jsonFile, vsiPaths)
+    jsonFile.close()
 
     # Call the matlab preprocessing function
-    #  Some ugly quotation workarounds
-    argStr = 'matlab -nosplash -nodesktop -r "{}"'.format("downsampleAndSegmentVsis('{}')".format(jsonPath)) 
+    argStr = 'matlab -nosplash -nodesktop -r "downsampleAndSegmentVsis(\'{}\'); exit"'.format(jsonPath)
     print "argStr: " + argStr
-    sp.call(argStr, shell=True)
+    sp.call(argStr, shell=True, cwd=experimentPath, env=os.environ)
 
     print "Preprocessing Complete!"
-    print "Experiment Path:", dirPath
+    print "Experiment Root Path:", experimentPath
+    print "Data Path:", dataPath
     print "JSON Path:", jsonPath
     
 

@@ -1,7 +1,7 @@
 function assignBregmaCoordinates(experimentPath)
 
     %% Load JSON data
-    jsonPath = fullfile(experimentPath, '.metadata.json');
+    jsonPath = fullfile(experimentPath, '.registrationData', 'metadata.json');
     data = loadjson(jsonPath);
 
     for i = 1:length(data)
@@ -9,8 +9,10 @@ function assignBregmaCoordinates(experimentPath)
         currImData = data{i};
         im = imread(currImData.downsampledImagePath);
 
+        [~, name] = fileparts(currImData.downsampledImagePath);
+
         %% Get Bregma Coordinate or disqualify images
-        response = getUserInput(im);
+        response = getUserInput(im, name);
         currImData.bregmaCoord = str2double(response);
         currImData.exclude = isexclude(response);
 
@@ -20,18 +22,31 @@ function assignBregmaCoordinates(experimentPath)
     end
 
 
-function rsp = getUserInput(im)
+function rsp = getUserInput(im, name)
     %% Display image and get user response
-    figure, imshow(im, [])
-    title('Image Values Adjusted for Easier Visibility')
+    imshow(im, [])
+    %title('Image Values Adjusted for Easier Visibility')
+    title(name)
+
 
     rsp = inputdlg('Please Enter Bregma Coord (mm) or "exclude"');
+    
+    % if cancel is pressed
+    if isempty(rsp)
+        b = questdlg('Exit Bregma Coordinate Assignment?', 'Exit?', 'Yes');
+        switch b
+        case 'Yes'
+            exit
+        otherwise
+            rsp = getUserInput(im, name);
+        end
+    end
 
-    %% Ensure that response is valid
-    if isnan(coord) && ~isexclude(rsp)
-        warndlg('Please Input a Number or "exclude"!', 'Unacceptable Input')
-        rsp = getUserInput(im);
+    %% Ensure that response is valid, empty cell if cancel is pressed
+    if isnan(str2double(rsp)) && ~isexclude(rsp)
+        disp('Please Input a Number or "exclude"!')
+        rsp = getUserInput(im, name);
     end
 
 function bool = isexclude(str)
-    bool = strcmpi(rsp, 'exclude');
+    bool = strcmpi(str, 'exclude');

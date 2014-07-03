@@ -41,7 +41,7 @@ function mask = findBrainSection(im)
     disp('Resizing binary image.....')
     mask = imresize(mask, size(im));
     %debugShow(mask, 'final')
-
+    
 
 function mask = getLargest(mask)
     %% label regions
@@ -53,7 +53,9 @@ function mask = getLargest(mask)
     largest = find(areas == max(areas));
 
     %% Set all other regions to zero
-    mask(labMask ~= largest) = 0;
+    if ~isempty(largest)
+        mask(labMask ~= largest) = 0;
+    end
 
 function im = hackyBackgroundSubtract(im)
     [nr, nc] = size(im);

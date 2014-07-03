@@ -26,7 +26,8 @@
 #include "itkMemoryProbesCollectorBase.h"
 #include "itkCommand.h"
 
-const char * atlasPath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/atlasVolume/atlasVolume.mhd";
+const char * atlasReferencePath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/atlasVolume/atlasVolume.mhd";
+const char * atlasLabelsPath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/annotation.mhd";
 const unsigned int BSplineOrder = 3;
 
 typedef itk::Image<unsigned char, 2> ImageType;
@@ -38,7 +39,7 @@ typedef itk::Vector<float, 2> DisplacementPixelType;
 typedef itk::Image<DisplacementPixelType, 2> DisplacementFieldType;
 
 // Function Declarations
-ImageType::Pointer getCoronalAtlasSlice(int);
+ImageType::Pointer getCoronalAtlasSlice(int, const char *);
 ImageType::Pointer rotateImage(ImageType::Pointer);
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
 BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer, ImageType::Pointer);
@@ -158,11 +159,11 @@ public:
 
 int main(int argc, char *argv[]){
     //Check args
-    if (argc < 4) {
+    if (argc < 5) {
             std::cerr << "Missing Parameters " << std::endl;
             std::cerr << "Usage: " << argv[0];
-            std::cerr << " fixedImage movingImage";
-            std::cerr << " outputPath";
+            std::cerr << " fixedImage sliceDepth";
+            std::cerr << " outputAtlasImage outputAtlasLabels";
             return EXIT_FAILURE;
     }
 
@@ -173,8 +174,8 @@ int main(int argc, char *argv[]){
     typedef itk::ResampleImageFilter<ImageType, ImageType> ResampleFilterType;
     
 
-    // Get corresponding atlas slice
-    ImageType::Pointer atlasSlice = getCoronalAtlasSlice(atoi(argv[2]));
+    // Get corresponding atlas reference slice
+    ImageType::Pointer atlasSlice = getCoronalAtlasSlice(atoi(argv[2]), atlasReferencePath);
 
     // Load the input image
     ReaderType::Pointer inputReader = ReaderType::New();
@@ -184,13 +185,9 @@ int main(int argc, char *argv[]){
 
     // Set the input spacing and atlas direction
     ImageType::SpacingType spacing;
-    spacing[0] = 25.7764;
-    spacing[1] = 25.7764;
+    spacing[0] = 25;
+    spacing[1] = 25;
     inputImage->SetSpacing(spacing);
-    ImageType::SpacingType atlasSpacing;
-    atlasSpacing[0] = 25.0;
-    atlasSpacing[1] = 25.0;
-    atlasSlice->SetSpacing(atlasSpacing);
     atlasSlice->SetDirection(inputImage->GetDirection());
 
     // Save the slice locally, until I feel more confident
@@ -228,16 +225,24 @@ int main(int argc, char *argv[]){
     deformableResampler->SetOutputDirection(inputImage->GetDirection());
     deformableResampler->SetDefaultPixelValue(0);
 
-    // Finally, connect the file writer to write the output file
+    // Write the registered reference image to the specified filepath
     WriterType::Pointer outputWriter = WriterType::New();
     outputWriter->SetFileName(argv[3]);
     outputWriter->SetInput(deformableResampler->GetOutput());
     outputWriter->Update();
 
+    // Transform the annotated atlas slice and write the output to the specified filepath
+    ImageType::Pointer annotationSlice = getCoronalAtlasSlice(atoi(argv[2]), atlasLabelsPath);
+    // The rigid resampler is the start of the pipeline
+    rigidResampler->SetInput(annotationSlice);
+    // Updating the output writer will pull the annotated slice through
+    outputWriter->SetFileName(argv[4]);
+    outputWriter->Update();    
+
     return EXIT_SUCCESS;
 }
 
-ImageType::Pointer getCoronalAtlasSlice(int sliceDepth) {
+ImageType::Pointer getCoronalAtlasSlice(int sliceDepth, const char * atlasPath) {
     // Declare 3D and 2D image types
     typedef unsigned char AtlasPixelType;
     typedef unsigned char SlicePixelType;

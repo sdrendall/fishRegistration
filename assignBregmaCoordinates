@@ -1,5 +1,5 @@
 #!/bin/bash
 
 # Use the current directory by default
-matlab -nosplash -nodesktop -r "assignBregmaCoordinates('${1:-.}')"
+matlab -nosplash -nodesktop -r "assignBregmaCoordinates('${1:-.}'); exit"
 echo "Bregma Coordinates Assigned!"

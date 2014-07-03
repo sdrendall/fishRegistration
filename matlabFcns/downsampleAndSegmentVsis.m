@@ -10,9 +10,10 @@ function downsampleAndSegmentVsis(jsonPath)
     %   1. The Dapi (or nissl) channel is loaded from each vsi
     %   2. Brain Section is determined using otsu thresholding
     %   3. Non-brain pixels are set to 0
-    %   4. Image is downsized such that each pixel represents 25um x 25um of physical space
-    %   5. Image is padded with zeros to be at least the same size as coronal images in the Allen Brain Atals (456 x 320)
-    %   6. Image is saved as an 8-bit png file in the directory containing the JSON file at jsonPath
+    %   4. Image is normalized so that it fills the full range of the output bitdepth
+    %   5. Image is downsized such that each pixel represents 25um x 25um of physical space
+    %   6. Image is padded with zeros to be at least the same size as coronal images in the Allen Brain Atals (456 x 320)
+    %   7. Image is saved as an 8-bit png file in the directory containing the JSON file at jsonPath
     %
     %   The JSON file is updated after each iteration to include the path to the downsampled image
 
@@ -72,9 +73,9 @@ function im = padToAtlasSize(im)
 
 function pngPath = generatePngPath(jsonPath, vsiPath)
     disp('Generating output path.....')
-    jsonDir = fileparts(jsonPath);
+    dataDir = fileparts(jsonPath);
     [~, baseVsiName] = fileparts(vsiPath);
-    pngPath = fullfile(jsonDir, [baseVsiName, '.png']);
+    pngPath = fullfile(dataDir, [baseVsiName, '_downsampled.png']);
 
 function im = convertToUint8(im)
     disp('Converting to uint8.....')
