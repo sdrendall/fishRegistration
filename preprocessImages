@@ -43,7 +43,7 @@ def ensureDir(dirPath):
         os.mkdir(dirPath)
 
 def createJsonFile(dirPath, imagePath):
-    jsonPath = os.path.join(dirPath, 'data.json')
+    jsonPath = os.path.join(dirPath, '.metadata.json')
     jsonFile = open(jsonPath, 'w')
     populateJsonFile(jsonFile, imagePath)
     jsonFile.close()
@@ -63,7 +63,6 @@ def main():
     argsValid = checkArgs(argv)
     if not argsValid:
         return
-
     # Load filenames, and create the json file and the containing directory
     pathToImages = argv[1]
     dirPath = createDataDirectory()
