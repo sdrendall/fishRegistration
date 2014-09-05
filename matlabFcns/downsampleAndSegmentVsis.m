@@ -24,20 +24,26 @@ function downsampleAndSegmentVsis(jsonPath)
         %% Load data
         s = imageData{i};
         im = loadDapiFromVsi(s.vsiPath);
+        showMinMax(im)
 
         %% Segment Section
         disp('Detecting brain section.....')
         brain = findBrainSection(im);
         im(~brain) = 0;
+        showMinMax(im)
 
         %% Downsample, flip, flop, and pad
         im = downsampleToAtlasScale(im);
+        showMinMax(im)
         im = flipflop(im);
+        showMinMax(im)
         im = padToAtlasSize(im);
+        showMinMax(im)
 
         %% Save as 8-bit png
-        pngPath = generatePngPath(jsonPath, s.vsiPath);
         im = convertToUint8(im);
+        showMinMax(im)
+        pngPath = generatePngPath(jsonPath, s.vsiPath);
         imwrite(im, pngPath);
 
         %% Update JSON file
@@ -52,7 +58,6 @@ function im = loadDapiFromVsi(vsiPath)
     disp(['Loading ', vsiPath, '.....'])
     r = bfGetReader(vsiPath);
     im = bfGetPlane(r, 1);
-    im = double(im);
 
 function im = downsampleToAtlasScale(im)
     disp('Downsizing image.....')
@@ -81,3 +86,12 @@ function im = convertToUint8(im)
     disp('Converting to uint8.....')
     im = mat2gray(im); % Normalize, set all values 0 - 1
     im = uint8(im*255); % Spread over 255, convert to uint8
+
+function im = uint16ToUint8(im)
+    disp('Converting uint16 to uint8.....')
+    im = double(im)./(2^16 - 1); % Set all values 0 - 1
+    im = uint8(im*255); % Spread over 255, convert to uint8
+
+function showMinMax(im)
+    disp(['min: ', num2str(min(im(:)))])
+    disp(['max: ', num2str(max(im(:)))])

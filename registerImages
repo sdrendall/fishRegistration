@@ -37,13 +37,16 @@ def isInvalidExperimentPath(expPath):
         return False
 
 def generateArgString(imdata):
-    imdata['registeredAtlasReferenceImagePath'] = generateReferenceImagePath(imdata['downsampledImagePath'])
-    imdata['registeredAtlasLabelsPath'] = generateLabelsPath(imdata['downsampledImagePath']) 
     return 'registerSliceToAtlas {downsampledImagePath} {atlasCoord} \
         {registeredAtlasReferenceImagePath} {registeredAtlasLabelsPath}'.format(**imdata)
 
+def generateReferenceOutputPaths(imdata):
+    imdata['registeredAtlasReferenceImagePath'] = generateReferenceImagePath(imdata['downsampledImagePath'])
+    imdata['registeredAtlasLabelsPath'] = generateLabelsPath(imdata['downsampledImagePath']) 
+
 def registerImage(imdata, expPath):
     imdata['atlasCoord'] = bregmaToAtlas(imdata['bregmaCoord'])
+    generateReferenceOutputPaths(imdata)
     argStr = generateArgString(imdata)
 
     try:
@@ -66,14 +69,13 @@ def mm2um(mm):
     return mm*1000
 
 def generateReferenceImagePath(downsampledImagePath):
-    outputPath = downsampledImagePath.split('.')[-1] #remove suffix
-    outputPath += '_registeredAtlasReferenceImage.png'
-    return outputPath
+    outputPath = os.path.splitext(downsampledImagePath)[0] #remove suffix
+    return outputPath[:-12] + u'_registeredAtlasReferenceImage.png' # remove '_downsampled'
+    
 
 def generateLabelsPath(downsampledImagePath):
-    outputPath = downsampledImagePath.split('.')[-1] #remove suffix
-    outputPath += '_registeredAtlasLabels.png'
-    return outputPath
+    outputPath = os.path.splitext(downsampledImagePath)[0] #remove suffix
+    return outputPath[:-12] + u'_registeredAtlasLabels.png' # remove '_downsampled'
 
 def loadJson(jsonPath):
     jsonFile = open(jsonPath)
@@ -97,6 +99,8 @@ def main():
         print "Invalid Experiment Path:"
         print expPath
         return
+
+    print "expPath: ", expPath
 
     # Load JSON
     jsonPath = generateJsonPath(expPath)

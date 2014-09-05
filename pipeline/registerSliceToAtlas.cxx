@@ -51,6 +51,7 @@ void displayRegistrationResults(itk::OptimizerParameters<double>, const unsigned
 void debugOut(const char *);
 
 // Observer class, to output the progress of the registration
+// Both observers are copied directly from examples, without alteration
 class CommandIterationUpdate : public itk::Command {
 public:
   typedef  CommandIterationUpdate   Self;
@@ -233,6 +234,7 @@ int main(int argc, char *argv[]){
 
     // Transform the annotated atlas slice and write the output to the specified filepath
     ImageType::Pointer annotationSlice = getCoronalAtlasSlice(atoi(argv[2]), atlasLabelsPath);
+    annotationSlice->SetDirection(inputImage->GetDirection());
     // The rigid resampler is the start of the pipeline
     rigidResampler->SetInput(annotationSlice);
     // Updating the output writer will pull the annotated slice through
