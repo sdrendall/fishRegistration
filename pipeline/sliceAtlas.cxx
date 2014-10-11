@@ -3,8 +3,11 @@
 #include "itkImageFileWriter.h"
 #include "itkExtractImageFilter.h"
 #include "itkImage.h"
+#include "itkPermuteAxesImageFilter.h"
+
 
 const char * atlasPath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/atlasVolume/atlasVolume.mhd";
+//const char * atlasPath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/annotation.mhd";
 
 void debugOut(const char * msg) {
     std::cout << "[Debug] " << msg << std::endl;
@@ -73,10 +76,29 @@ int main(int argc, char *argv[]){
     extFilter->SetInput(reader->GetOutput());
     extFilter->SetDirectionCollapseToIdentity();
 
+
+    // Rotation filter
+    debugOut("Creating rotation filter");
+    typedef itk::PermuteAxesImageFilter<SliceImageType> PermuteAxesFilterType;
+
+    // Create a permutation filter
+    PermuteAxesFilterType::Pointer permutationFilter = PermuteAxesFilterType::New();
+
+    // Define the axes permutation order
+    itk::FixedArray<unsigned int, 2> order;
+    order[0] = 1;
+    order[1] = 0;
+    
+    // Permute the axes
+    permutationFilter->SetInput(extFilter->GetOutput());
+    permutationFilter->SetOrder(order);
+
+
     debugOut("Creating FileWriter...");
     // Create a FileWriter to save the images -- Connect it to the extraction filter
     SliceWriterType::Pointer writer = SliceWriterType::New();
-    writer->SetInput(extFilter->GetOutput());
+    writer->SetInput(permutationFilter->GetOutput());
+
 
     debugOut("Computing array index of physical coordinate...");
     // Find the corresponding atlas index to the point specified by the user

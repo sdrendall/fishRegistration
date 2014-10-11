@@ -124,7 +124,7 @@ public:
   {
   public:
     typedef  DemonsIterationUpdate                     Self;
-    typedef  itk::Command                               Superclass;
+    typedef  itk::Command                              Superclass;
     typedef  itk::SmartPointer<DemonsIterationUpdate>  Pointer;
     itkNewMacro( DemonsIterationUpdate );
   protected:
