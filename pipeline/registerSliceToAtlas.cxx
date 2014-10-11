@@ -11,6 +11,7 @@
 #include "itkCenteredRigid2DTransform.h"
 #include "itkCenteredTransformInitializer.h"
 #include "itkResampleImageFilter.h"
+#include "itkNearestNeighborInterpolateImageFunction.h"
 
 #include "itkBSplineTransform.h"
 #include "itkNormalizedCorrelationImageToImageMetric.h"
@@ -37,6 +38,7 @@ typedef itk::BSplineTransform<double, 2, BSplineOrder> BSplineTransformType; // 
 // Types for the demons registration
 typedef itk::Vector<float, 2> DisplacementPixelType;
 typedef itk::Image<DisplacementPixelType, 2> DisplacementFieldType;
+typedef itk::WarpImageFilter<ImageType, ImageType, DisplacementFieldType> WarperType;
 
 // Function Declarations
 ImageType::Pointer getCoronalAtlasSlice(int, const char *);
@@ -44,6 +46,7 @@ ImageType::Pointer rotateImage(ImageType::Pointer);
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
 BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer, ImageType::Pointer);
 DisplacementFieldType::Pointer getDemonsDisplacementField(ImageType::Pointer, ImageType::Pointer);
+WarperType::Pointer createAndConfigureDemonsWarper(DisplacementFieldType::Pointer, ImageType::Pointer);
 
 double degreesToRadians(double);
 void writeImage(ImageType::Pointer, const char *);
@@ -173,10 +176,14 @@ int main(int argc, char *argv[]){
     typedef itk::ImageFileWriter<ImageType> WriterType;
 
     typedef itk::ResampleImageFilter<ImageType, ImageType> ResampleFilterType;
-    
+
+    // The annotated images must be resampled with a nearest neighbor interpolator
+    typedef itk::NearestNeighborInterpolateImageFunction<ImageType, double> NearestNeighborInterpolatorType;
+
 
     // Get corresponding atlas reference slice
     ImageType::Pointer atlasSlice = getCoronalAtlasSlice(atoi(argv[2]), atlasReferencePath);
+    ImageType::Pointer annotationSlice = getCoronalAtlasSlice(atoi(argv[2]), atlasLabelsPath);
 
     // Load the input image
     ReaderType::Pointer inputReader = ReaderType::New();
@@ -190,9 +197,11 @@ int main(int argc, char *argv[]){
     spacing[1] = 25;
     inputImage->SetSpacing(spacing);
     atlasSlice->SetDirection(inputImage->GetDirection());
+    annotationSlice->SetDirection(inputImage->GetDirection());
 
-    // Save the slice locally, until I feel more confident
+    //FOR DEBUGGING - Save the slice locally, until I feel more confident
     writeImage(atlasSlice, "/home/sam/Desktop/extractedSlice.jpg");
+    writeImage(annotationSlice, "/home/sam/Desktop/extAnnoSlice.jpg");
     writeImage(inputImage, "/home/sam/Desktop/inputImage.jpg");
 
     RigidTransformType::Pointer rigidTransform = getRigidRegistrationTransform(inputImage, atlasSlice);
@@ -210,7 +219,7 @@ int main(int argc, char *argv[]){
 
     // Update, to resample the image so it can be used for the deformable registration
     rigidResampler->Update();
-    writeImage(rigidResampler->GetOutput(), "/home/sam/afterRigidRegistration.jpg");
+    writeImage(rigidResampler->GetOutput(), "/home/sam/Desktop/afterRigidRegistration.jpg");
 
     // Compute a deformable registration transform using the resampled atlas slice and the input image
     BSplineTransformType::Pointer deformableTransform = getBSPlineRegistrationResults(rigidResampler->GetOutput(), inputImage); // (movingImage, fixedImage)
@@ -226,15 +235,27 @@ int main(int argc, char *argv[]){
     deformableResampler->SetOutputDirection(inputImage->GetDirection());
     deformableResampler->SetDefaultPixelValue(0);
 
+    // Compute the demons registration displacement field and create a warper to manipulate images with
+    DisplacementFieldType::Pointer displacementField = getDemonsDisplacementField(atlasSlice, inputImage); // (movingImage, fixedImage)
+    WarperType::Pointer demonsWarper = createAndConfigureDemonsWarper(displacementField, inputImage); // (displacementField, targetImage)
+
+    // Add the warper to the pipeline
+    demonsWarper->SetInput(deformableResampler->GetOutput());
+
     // Write the registered reference image to the specified filepath
     WriterType::Pointer outputWriter = WriterType::New();
     outputWriter->SetFileName(argv[3]);
-    outputWriter->SetInput(deformableResampler->GetOutput());
+    outputWriter->SetInput(demonsWarper->GetOutput());
     outputWriter->Update();
 
     // Transform the annotated atlas slice and write the output to the specified filepath
-    ImageType::Pointer annotationSlice = getCoronalAtlasSlice(atoi(argv[2]), atlasLabelsPath);
-    annotationSlice->SetDirection(inputImage->GetDirection());
+    // Create a nearest neighbor interpolator to use for the interpolation
+    NearestNeighborInterpolatorType::Pointer nnInterpolator = NearestNeighborInterpolatorType::New();
+    // Use the nnInterpolator for each resampler in the pipeline
+    rigidResampler->SetInterpolator(nnInterpolator);
+    deformableResampler->SetInterpolator(nnInterpolator);
+    demonsWarper->SetInterpolator(nnInterpolator);
+
     // The rigid resampler is the start of the pipeline
     rigidResampler->SetInput(annotationSlice);
     // Updating the output writer will pull the annotated slice through
@@ -521,6 +542,9 @@ DisplacementFieldType::Pointer getDemonsDisplacementField(ImageType::Pointer mov
     ImageCasterType::Pointer movingCaster = ImageCasterType::New();
     ImageCasterType::Pointer fixedCaster = ImageCasterType::New();
 
+    movingCaster->SetInput(movingImage);
+    fixedCaster->SetInput(fixedImage);
+
     // Create a histogram matcher, and feed it the caster outputs
     MatchingFilterType::Pointer matcher = MatchingFilterType::New();
     matcher->SetInput(movingCaster->GetOutput());
@@ -552,6 +576,23 @@ DisplacementFieldType::Pointer getDemonsDisplacementField(ImageType::Pointer mov
     // Return output
     DisplacementFieldType::Pointer outputField = filter->GetOutput();
     return outputField;
+}
+
+WarperType::Pointer createAndConfigureDemonsWarper(DisplacementFieldType::Pointer displacementField, ImageType::Pointer targetImage) {
+    // Define warper and interpolator types
+    typedef itk::LinearInterpolateImageFunction<ImageType, double> InterpolatorType;
+
+    // Instantiate a warper and an interpolator
+    WarperType::Pointer warper = WarperType::New();
+    InterpolatorType::Pointer interpolator = InterpolatorType::New();
+
+    warper->SetInterpolator(interpolator);
+    warper->SetOutputSpacing(targetImage->GetSpacing());
+    warper->SetOutputOrigin(targetImage->GetOrigin());
+    warper->SetOutputDirection(targetImage->GetDirection());
+    warper->SetDisplacementField(displacementField);
+
+    return warper;
 }
 
 void writeImage(ImageType::Pointer im, const char * path) {
