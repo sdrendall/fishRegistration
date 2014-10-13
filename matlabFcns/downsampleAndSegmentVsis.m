@@ -27,10 +27,10 @@ function downsampleAndSegmentVsis(jsonPath)
         showMinMax(im)
 
         %% Segment Section
-        disp('Detecting brain section.....')
-        brain = findBrainSection(im);
-        im(~brain) = 0;
-        showMinMax(im)
+        %disp('Detecting brain section.....')
+        %brain = findBrainSection(im);
+        %im(~brain) = 0;
+        %showMinMax(im)
 
         %% Downsample, flip, flop, and pad
         im = downsampleToAtlasScale(im);
