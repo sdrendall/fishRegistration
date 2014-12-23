@@ -48,7 +48,7 @@ def populateJsonFile(j, vsiPaths):
     for vsiPath in vsiPaths:
             imDict = {'vsiPath': vsiPath}
             dictList.append(imDict)
-    json.dump(dictList, j)
+    json.dump(dictList, j, sort_keys=True, indent=4)
 
 def findVsis(expPath):
     vsiPaths = list()

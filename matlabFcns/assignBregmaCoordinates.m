@@ -14,6 +14,7 @@ function assignBregmaCoordinates(experimentPath)
         %% Get Bregma Coordinate or disqualify images
         response = getUserInput(im, name);
         currImData.bregmaCoord = str2double(response);
+        currImData.atlasCoord = bregmaToAtlas(currImData.bregmaCoord)
         currImData.exclude = isexclude(response);
 
         %% Update json file
@@ -50,3 +51,11 @@ function rsp = getUserInput(im, name)
 
 function bool = isexclude(str)
     bool = strcmpi(str, 'exclude');
+
+function atlasCoord = bregmaToAtlas(bCoord)
+    bregmaInAtlas = 5525; % in um
+    bCoord = mm2um(bCoord);
+    atlasCoord = bregmaInAtlas - bCoord;
+
+function um = mm2um(mm)
+    um = mm*1000;

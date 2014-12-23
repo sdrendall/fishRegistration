@@ -37,15 +37,14 @@ def isInvalidExperimentPath(expPath):
         return False
 
 def generateArgString(imdata):
-    return 'registerSliceToAtlas {downsampledImagePath} {atlasCoord} \
-        {registeredAtlasReferenceImagePath} {registeredAtlasLabelsPath}'.format(**imdata)
+    return "registerSliceToAtlas_filterVersion '{downsampledImagePath}' '{atlasCoord}' \
+        '{registeredAtlasReferenceImagePath}' '{registeredAtlasLabelsPath}'".format(**imdata)
 
 def generateReferenceOutputPaths(imdata):
     imdata['registeredAtlasReferenceImagePath'] = generateReferenceImagePath(imdata['downsampledImagePath'])
     imdata['registeredAtlasLabelsPath'] = generateLabelsPath(imdata['downsampledImagePath']) 
 
 def registerImage(imdata, expPath):
-    imdata['atlasCoord'] = bregmaToAtlas(imdata['bregmaCoord'])
     generateReferenceOutputPaths(imdata)
     argStr = generateArgString(imdata)
 
@@ -60,19 +59,10 @@ def registerImage(imdata, expPath):
     else:
         imdata['registrationSuccessful'] = True
 
-def bregmaToAtlas(bCoord):
-    bregmaInAtlas = 5525 # in um
-    bCoord = mm2um(float(bCoord))
-    return bregmaInAtlas - bCoord
-
-def mm2um(mm):
-    return mm*1000
-
 def generateReferenceImagePath(downsampledImagePath):
     outputPath = os.path.splitext(downsampledImagePath)[0] #remove suffix
     return outputPath[:-12] + u'_registeredAtlasReferenceImage.png' # remove '_downsampled'
     
-
 def generateLabelsPath(downsampledImagePath):
     outputPath = os.path.splitext(downsampledImagePath)[0] #remove suffix
     return outputPath[:-12] + u'_registeredAtlasLabels.png' # remove '_downsampled'
@@ -85,7 +75,7 @@ def loadJson(jsonPath):
 
 def updateJson(jsonPath, dictList):
     jsonFile = open(jsonPath, 'w')
-    json.dump(dictList, jsonFile)
+    json.dump(dictList, jsonFile, sort_keys=True, indent=4)
     jsonFile.close()
 
 
@@ -108,10 +98,13 @@ def main():
 
     # Lists and dicts are mutable so they will be modified in place
     for imdata in dictList:
-        # Run registration pipeline
-        registerImage(imdata, expPath)
-        # Update JSON file
-        updateJson(jsonPath, dictList)
+        if imdata['exclude'] == 0:
+            # Run registration pipeline
+            registerImage(imdata, expPath)
+            # Update JSON file
+            updateJson(jsonPath, dictList)
+        else:
+            print "Excluding " + imdata['vsiPath']
 
     print 'Registration complete!'
 

@@ -445,6 +445,7 @@ BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer m
     typedef itk::ImageRegistrationMethod<ImageType, ImageType> RegistrationType;
     typedef BSplineTransformType::ParametersType ParametersType;
 
+
     // Instantiate the metric, optimizer, interpolator, transform and registration objects
     MetricType::Pointer metric = MetricType::New();
     OptimizerType::Pointer optimizer = OptimizerType::New();
@@ -458,7 +459,7 @@ BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer m
     registration->SetInterpolator(interpolator);
     registration->SetTransform(transform);
 
-    // Connect the inputs
+    // Connect the filters to the registration object
     registration->SetFixedImage(fixedImage);
     registration->SetMovingImage(movingImage);
     registration->SetFixedImageRegion(fixedImage->GetBufferedRegion());
@@ -594,6 +595,8 @@ WarperType::Pointer createAndConfigureDemonsWarper(DisplacementFieldType::Pointe
 
     return warper;
 }
+
+
 
 void writeImage(ImageType::Pointer im, const char * path) {
     typedef itk::ImageFileWriter<ImageType> WriterType;
