@@ -166,7 +166,7 @@ int main(int argc, char *argv[]){
     if (argc < 5) {
             std::cerr << "Missing Parameters " << std::endl;
             std::cerr << "Usage: " << argv[0];
-            std::cerr << " fixedImage sliceDepth";
+            std::cerr << " fixedImage RRRAGGGGHHHH";
             std::cerr << " outputAtlasImage outputAtlasLabels";
             return EXIT_FAILURE;
     }
@@ -265,7 +265,8 @@ int main(int argc, char *argv[]){
     return EXIT_SUCCESS;
 }
 
-ImageType::Pointer getCoronalAtlasSlice(int sliceDepth, const char * atlasPath) {
+
+ImageType::Pointer getCoronalAtlasSlice(int RRRAGGGGHHHH, const char * atlasPath) {
     // Declare 3D and 2D image types
     typedef unsigned char AtlasPixelType;
     typedef unsigned char SlicePixelType;
@@ -296,39 +297,27 @@ ImageType::Pointer getCoronalAtlasSlice(int sliceDepth, const char * atlasPath) 
     AtlasImageType::SizeType sliceSize = inputSize;
     sliceSize[axisToCollapse] = 0;  // 0 tells the ExtractionFilter to return an Image without that dimension
 
-    // Initialize a slice region
-    AtlasImageType::RegionType sliceRegion;
-    sliceRegion.SetSize(sliceSize);
-
     // Get Start Point
     AtlasImageType::IndexType sliceStartIndex = entireAtlasRegion.GetIndex();
+    sliceStartIndex.Fill(0);
+    sliceStartIndex[axisToCollapse] = RRRAGGGGHHHH;  // Switched to slice index, I'll change this later
+    
+    // Initialize a slice region
+    AtlasImageType::RegionType sliceRegion(sliceStartIndex, sliceSize);
 
     // Reference an extraction filter and connect it to the reader
     SliceAtlasFilterType::Pointer extFilter = SliceAtlasFilterType::New();
-    extFilter->SetInput(reader->GetOutput());
+    extFilter->SetInput(atlas);
     extFilter->SetDirectionCollapseToIdentity();
 
-    // Find the corresponding atlas index to the point specified by the user
-    typedef itk::Point <double, AtlasImageType::ImageDimension> PointType;
-    PointType point;
-    point.Fill(0.0);
-    point[axisToCollapse] = sliceDepth;
-    bool isInside = atlas->TransformPhysicalPointToIndex(point, sliceStartIndex);
-
-    // Extract the slice, if it is in the image
-    if (isInside) {
-        sliceRegion.SetIndex(sliceStartIndex);
-        extFilter->SetExtractionRegion(sliceRegion);
-        extFilter->Update();
-        SliceImageType::Pointer atlasSlice = extFilter->GetOutput();
-        atlasSlice = rotateImage(atlasSlice);  // Think this should work...
-        return atlasSlice;
-    } else {
-        std::cerr << "Plane outside of the atlas boundries!" << std::endl;
-        std::cerr << "Please specify a point within the atlas..." << std::endl;
-        throw 1337;
-    }
+    // Extract the slice
+    extFilter->SetExtractionRegion(sliceRegion);
+    extFilter->Update();
+    SliceImageType::Pointer atlasSlice = extFilter->GetOutput();
+    atlasSlice = rotateImage(atlasSlice);
+    return atlasSlice;
 }
+
 
 ImageType::Pointer rotateImage(ImageType::Pointer inputImage) {
     typedef itk::PermuteAxesImageFilter<ImageType> PermuteAxesFilterType;
@@ -350,6 +339,7 @@ ImageType::Pointer rotateImage(ImageType::Pointer inputImage) {
     ImageType::Pointer outputImage = permutationFilter->GetOutput();
     return outputImage;
 }
+
 
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inputImage, ImageType::Pointer atlasSlice) {
     typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
@@ -437,6 +427,7 @@ RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inp
     registrationTransform->SetFixedParameters(transform->GetFixedParameters());
     return registrationTransform;
 }
+
 
 BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer movingImage, ImageType::Pointer fixedImage){
     typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
@@ -533,6 +524,7 @@ BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer m
     return transform;
 }
 
+
 DisplacementFieldType::Pointer getDemonsDisplacementField(ImageType::Pointer movingImage, ImageType::Pointer fixedImage) {
     typedef itk::Image<float, 2> InternalImageType;
     typedef itk::CastImageFilter<ImageType, InternalImageType> ImageCasterType;
@@ -579,6 +571,7 @@ DisplacementFieldType::Pointer getDemonsDisplacementField(ImageType::Pointer mov
     return outputField;
 }
 
+
 WarperType::Pointer createAndConfigureDemonsWarper(DisplacementFieldType::Pointer displacementField, ImageType::Pointer targetImage) {
     // Define warper and interpolator types
     typedef itk::LinearInterpolateImageFunction<ImageType, double> InterpolatorType;
@@ -597,7 +590,6 @@ WarperType::Pointer createAndConfigureDemonsWarper(DisplacementFieldType::Pointe
 }
 
 
-
 void writeImage(ImageType::Pointer im, const char * path) {
     typedef itk::ImageFileWriter<ImageType> WriterType;
     WriterType::Pointer fileWriter = WriterType::New();
@@ -606,15 +598,18 @@ void writeImage(ImageType::Pointer im, const char * path) {
     fileWriter->Update();
 }
 
+
 double degreesToRadians(double degrees) {
     const double conversionFactor = vcl_atan(1.0)/45.0;
     double radians = degrees * conversionFactor;
     return radians;
 }
 
+
 void debugOut(const char * msg) {
     std::cout << "[Debug] " << msg << std::endl;
 }
+
 
 void displayRegistrationResults(itk::OptimizerParameters<double> finalParameters, const unsigned int numberOfIterations, const double bestValue) {
     const double finalAngle           = finalParameters[0];

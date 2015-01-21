@@ -1,10 +1,12 @@
-PROJECT(registerSliceToAtlas_filterVersion)
+PROJECT(registerSliceToAtlas)
 
 FIND_PACKAGE(ITK)
 IF(ITK_FOUND)
     INCLUDE(${ITK_USE_FILE})
 ENDIF(ITK_FOUND)
 
-ADD_EXECUTABLE(registerSliceToAtlas_filterVersion registerSliceToAtlas.cxx)
+ADD_EXECUTABLE(registerSliceToAtlas registerSliceToAtlas.cxx)
 
-TARGET_LINK_LIBRARIES(registerSliceToAtlas_filterVersion ${ITK_LIBRARIES})
+TARGET_LINK_LIBRARIES(registerSliceToAtlas ${ITK_LIBRARIES})
+
+SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)

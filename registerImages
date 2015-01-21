@@ -37,7 +37,7 @@ def isInvalidExperimentPath(expPath):
         return False
 
 def generateArgString(imdata):
-    return "registerSliceToAtlas_filterVersion '{downsampledImagePath}' '{atlasCoord}' \
+    return "registerSliceToAtlas '{downsampledImagePath}' '{atlasIndex}' \
         '{registeredAtlasReferenceImagePath}' '{registeredAtlasLabelsPath}'".format(**imdata)
 
 def generateReferenceOutputPaths(imdata):

@@ -26,7 +26,11 @@ function downsampleAndSegmentVsis(jsonPath)
         showMinMax(im)
 
         %% Calculate background noise statistics
-        [avg, sDev] = getBackgroundStats(im);  
+        %[avg, sDev] = getBackgroundStats(im);
+
+        %% Find the brain section
+        section = findBrainSection(im);
+        im(~section) = 0;
 
         %% Downsample, flip, flop, and pad
         im = downsampleToAtlasScale(im);
@@ -35,20 +39,21 @@ function downsampleAndSegmentVsis(jsonPath)
         showMinMax(im)
         im = padToAtlasSize(im);
         showMinMax(im)
-        im = convertZerosToNoise(im, avg, sDev);
-        showMinMax(im)
+        %im = convertZerosToNoise(im, avg, sDev);
+        %showMinMax(im)
 
         %% Save as 8-bit png
         im = convertToUint8(im);
         showMinMax(im)
-        pngPath = generatePngPath(jsonPath, s.vsiPath);
-        imwrite(im, pngPath);
+        outputPath = generateoutputPath(jsonPath, s.vsiPath);
+        %formatAndSaveMhd(im, outputPath);
+        imwrite(im, outputPath)
 
         %% Update JSON file
         disp('Updating JSON file.....')
 
         % Paths stored in metadata.json should be relative to the experimentPath
-        relativePath = generateRelativePath(pngPath);
+        relativePath = generateRelativePath(outputPath);
         s.downsampledImagePath = relativePath;
         imageData{i} = s;
         savejson('', imageData, jsonPath);
@@ -99,15 +104,15 @@ function im = convertZerosToNoise(im, m, s)
     z = m + s .* randn(size(z));
     im(im == 0) = z;
 
-function pngPath = generatePngPath(jsonPath, vsiPath)
+function outputPath = generateoutputPath(jsonPath, vsiPath)
     disp('Generating output path.....')
     dataDir = fileparts(jsonPath);
     [~, baseVsiName] = fileparts(vsiPath);
-    pngPath = fullfile(dataDir, [baseVsiName, '_downsampled.png']);
+    outputPath = fullfile(dataDir, [baseVsiName, '_downsampled.png']);
 
-function relPath = generateRelativePath(pngPath)
-    pathCoord = strfind(pngPath, '.registrationData');
-    relPath = pngPath(pathCoord:end);
+function relPath = generateRelativePath(outputPath)
+    pathCoord = strfind(outputPath, '.registrationData');
+    relPath = outputPath(pathCoord:end);
 
 function im = convertToUint8(im)
     disp('Converting to uint8.....')
@@ -122,3 +127,18 @@ function im = uint16ToUint8(im)
 function showMinMax(im)
     disp(['min: ', num2str(min(im(:)))])
     disp(['max: ', num2str(max(im(:)))])
+
+function formatAndSaveMhd(data, outputPath)
+    disp('Generating Image Metadata.....')
+    img = generateMhdImage(data);
+    disp(['Saving Downsampled Image to ', outputPath])
+    write_mhd(outputPath, img,'ElementType', 'uint8', 'NDims', 2);
+
+function img = generateMhdImage(data)
+    s = size(data);
+    origin = [1 1];
+    spacing = [25 25];
+    orientation =[1 0; 0 1];
+
+    img = ImageType(s, origin, spacing, orientation);
+    img.data = data;

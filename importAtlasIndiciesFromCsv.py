@@ -9,5 +9,5 @@ jsonPath = argParser.generateJsonPath()
 csvPath = argParser.getCsvPath()
 
 importer = importTools.CoordinateImporter(csvPath=csvPath, jsonPath=jsonPath)
-importer.setMode_bregma()
+importer.setMode_index()
 importer.importFromCsv(csvHeaderLines=2)

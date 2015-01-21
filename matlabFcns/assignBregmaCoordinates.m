@@ -1,5 +1,7 @@
 function assignBregmaCoordinates(experimentPath)
 
+    disp(['experimentPath: ', experimentPath])
+
     %% Load JSON data
     jsonPath = fullfile(experimentPath, '.registrationData', 'metadata.json');
     data = loadjson(jsonPath);
