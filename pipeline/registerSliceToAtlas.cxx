@@ -5,9 +5,9 @@
 #include "itkExtractImageFilter.h"
 #include "itkImage.h"
 
-#include "itkImageRegistrationMethod.h"
+#include "itkImageRegistrationMethodv4.h"
 #include "itkMeanSquaresImageToImageMetric.h"
-#include "itkRegularStepGradientDescentOptimizer.h"
+#include "itkRegularStepGradientDescentOptimizerv4.h"
 #include "itkCenteredRigid2DTransform.h"
 #include "itkCenteredTransformInitializer.h"
 #include "itkResampleImageFilter.h"
@@ -15,6 +15,8 @@
 
 #include "itkBSplineTransform.h"
 #include "itkNormalizedCorrelationImageToImageMetric.h"
+
+#include "itkMattesMutualInformationImageToImageMetricv4.h"
 
 #include "itkDemonsRegistrationFilter.h"
 #include "itkHistogramMatchingImageFilter.h"
@@ -166,7 +168,7 @@ int main(int argc, char *argv[]){
     if (argc < 5) {
             std::cerr << "Missing Parameters " << std::endl;
             std::cerr << "Usage: " << argv[0];
-            std::cerr << " fixedImage RRRAGGGGHHHH";
+            std::cerr << " fixedImage sliceIndex";
             std::cerr << " outputAtlasImage outputAtlasLabels";
             return EXIT_FAILURE;
     }
@@ -235,17 +237,17 @@ int main(int argc, char *argv[]){
     deformableResampler->SetOutputDirection(inputImage->GetDirection());
     deformableResampler->SetDefaultPixelValue(0);
 
-    // Compute the demons registration displacement field and create a warper to manipulate images with
-    DisplacementFieldType::Pointer displacementField = getDemonsDisplacementField(atlasSlice, inputImage); // (movingImage, fixedImage)
-    WarperType::Pointer demonsWarper = createAndConfigureDemonsWarper(displacementField, inputImage); // (displacementField, targetImage)
-
-    // Add the warper to the pipeline
-    demonsWarper->SetInput(deformableResampler->GetOutput());
+//    // Compute the demons registration displacement field and create a warper to manipulate images with
+//    DisplacementFieldType::Pointer displacementField = getDemonsDisplacementField(atlasSlice, inputImage); // (movingImage, fixedImage)
+//    WarperType::Pointer demonsWarper = createAndConfigureDemonsWarper(displacementField, inputImage); // (displacementField, targetImage)
+//
+//    // Add the warper to the pipeline
+//    demonsWarper->SetInput(deformableResampler->GetOutput());
 
     // Write the registered reference image to the specified filepath
     WriterType::Pointer outputWriter = WriterType::New();
     outputWriter->SetFileName(argv[3]);
-    outputWriter->SetInput(demonsWarper->GetOutput());
+    outputWriter->SetInput(deformableResampler->GetOutput());
     outputWriter->Update();
 
     // Transform the annotated atlas slice and write the output to the specified filepath
@@ -254,7 +256,7 @@ int main(int argc, char *argv[]){
     // Use the nnInterpolator for each resampler in the pipeline
     rigidResampler->SetInterpolator(nnInterpolator);
     deformableResampler->SetInterpolator(nnInterpolator);
-    demonsWarper->SetInterpolator(nnInterpolator);
+    // demonsWarper->SetInterpolator(nnInterpolator);
 
     // The rigid resampler is the start of the pipeline
     rigidResampler->SetInput(annotationSlice);
@@ -266,7 +268,7 @@ int main(int argc, char *argv[]){
 }
 
 
-ImageType::Pointer getCoronalAtlasSlice(int RRRAGGGGHHHH, const char * atlasPath) {
+ImageType::Pointer getCoronalAtlasSlice(int sliceIndex, const char * atlasPath) {
     // Declare 3D and 2D image types
     typedef unsigned char AtlasPixelType;
     typedef unsigned char SlicePixelType;
@@ -300,7 +302,7 @@ ImageType::Pointer getCoronalAtlasSlice(int RRRAGGGGHHHH, const char * atlasPath
     // Get Start Point
     AtlasImageType::IndexType sliceStartIndex = entireAtlasRegion.GetIndex();
     sliceStartIndex.Fill(0);
-    sliceStartIndex[axisToCollapse] = RRRAGGGGHHHH;  // Switched to slice index, I'll change this later
+    sliceStartIndex[axisToCollapse] = sliceIndex;  // Switched to slice index, I'll change this later
     
     // Initialize a slice region
     AtlasImageType::RegionType sliceRegion(sliceStartIndex, sliceSize);
@@ -433,7 +435,7 @@ BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer m
     typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
     typedef itk::NormalizedCorrelationImageToImageMetric<ImageType, ImageType> MetricType;
     typedef itk::LinearInterpolateImageFunction<ImageType, double> InterpolatorType;
-    typedef itk::ImageRegistrationMethod<ImageType, ImageType> RegistrationType;
+    typedef itk::ImageRegistrationMethodv4<ImageType, ImageType, BSplineTransformType> RegistrationType;
     typedef BSplineTransformType::ParametersType ParametersType;
 
 
@@ -454,6 +456,27 @@ BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer m
     registration->SetFixedImage(fixedImage);
     registration->SetMovingImage(movingImage);
     registration->SetFixedImageRegion(fixedImage->GetBufferedRegion());
+
+    // Set Multi-Resolution Options
+    // The shrink factor denotes to the factor by which the image will be downsized
+    // The smoothing sigma determines the width of the gaussian kernel used to smooth the downsampled image
+    const unsigned int numberOfLevels = 3;
+
+    RegistrationType::ShrinkFactorsArrayType shrinkFactorPerLevel;
+    shrinkFactorPerLevel.SetSize(numberOfLevels);
+    shrinkFactorPerLevel[0] = 4;
+    shrinkFactorPerLevel[1] = 2;
+    shrinkFactorPerLevel[2] = 1;
+
+    RegistrationType::SmoothingSigmasArrayType smoothingSigmaPerLevel;
+    smoothingSigmaPerLevel.SetSize(numberOfLevels);
+    smoothingSigmaPerLevel[0] = 5;
+    smoothingSigmaPerLevel[1] = 3;
+    smoothingSigmaPerLevel[2] = 0;
+
+    registration->SetNumberOfLevels(numberOfLevels);
+    registration->SetShrinkFactorsPerLevel(shrinkFactorPerLevel);
+    registration->SetSmoothingSigmasPerLevel(smoothingSigmaPerLevel);
 
     // Calculate image physical dimensions and meshSize
     BSplineTransformType::PhysicalDimensionsType fixedPhysicalDimensions;
@@ -481,7 +504,7 @@ BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer m
     registration->SetInitialTransformParameters(transform->GetParameters());
 
     // Specify the optimizer parameters
-    optimizer->MaximizeOff();
+    // optimizer->MaximizeOff();  // Not used for v4 optimizer
     optimizer->SetMaximumStepLength(25.0);
     optimizer->SetMinimumStepLength(0.001);
     optimizer->SetRelaxationFactor(0.7);
