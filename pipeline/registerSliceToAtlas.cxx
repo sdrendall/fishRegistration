@@ -6,8 +6,10 @@
 #include "itkImage.h"
 
 #include "itkImageRegistrationMethodv4.h"
+#include "itkImageRegistrationMethod.h"
 #include "itkMeanSquaresImageToImageMetric.h"
 #include "itkRegularStepGradientDescentOptimizerv4.h"
+#include "itkRegularStepGradientDescentOptimizer.h"
 #include "itkCenteredRigid2DTransform.h"
 #include "itkCenteredTransformInitializer.h"
 #include "itkResampleImageFilter.h"
@@ -15,6 +17,7 @@
 
 #include "itkBSplineTransform.h"
 #include "itkNormalizedCorrelationImageToImageMetric.h"
+#include "itkBSplineTransformInitializer.h"
 
 #include "itkMattesMutualInformationImageToImageMetricv4.h"
 
@@ -33,9 +36,12 @@ const char * atlasReferencePath = "/home/sam/Pictures/allenReferenceAtlas_mouseC
 const char * atlasLabelsPath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/annotation.mhd";
 const unsigned int BSplineOrder = 3;
 
-typedef itk::Image<unsigned char, 2> ImageType;
+typedef itk::Image<float, 2> ImageType;
 typedef itk::CenteredRigid2DTransform<double> RigidTransformType;
 typedef itk::BSplineTransform<double, 2, BSplineOrder> BSplineTransformType; // <CoordinateRepType, Dims, BSplineOrder>
+
+typedef itk::Image<unsigned char, 2> EightBitImageType;
+typedef itk::CastImageFilter<ImageType, EightBitImageType> InternalToEightBitCasterType;
 
 // Types for the demons registration
 typedef itk::Vector<float, 2> DisplacementPixelType;
@@ -46,7 +52,7 @@ typedef itk::WarpImageFilter<ImageType, ImageType, DisplacementFieldType> Warper
 ImageType::Pointer getCoronalAtlasSlice(int, const char *);
 ImageType::Pointer rotateImage(ImageType::Pointer);
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
-BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer, ImageType::Pointer);
+BSplineTransformType::Pointer computeBsplineTransform(ImageType::Pointer, ImageType::Pointer);
 DisplacementFieldType::Pointer getDemonsDisplacementField(ImageType::Pointer, ImageType::Pointer);
 WarperType::Pointer createAndConfigureDemonsWarper(DisplacementFieldType::Pointer, ImageType::Pointer);
 
@@ -102,7 +108,7 @@ protected:
   BSplineTransformIterationUpdate() {};
 
 public:
-  typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
+  typedef itk::RegularStepGradientDescentOptimizerv4<double> OptimizerType;
   typedef   const OptimizerType *                  OptimizerPointer;
 
   void Execute(itk::Object *caller, const itk::EventObject & event)
@@ -175,7 +181,7 @@ int main(int argc, char *argv[]){
 
     // Declare Image, filter types ect
     typedef itk::ImageFileReader<ImageType> ReaderType;
-    typedef itk::ImageFileWriter<ImageType> WriterType;
+    typedef itk::ImageFileWriter<EightBitImageType> WriterType;
 
     typedef itk::ResampleImageFilter<ImageType, ImageType> ResampleFilterType;
 
@@ -202,9 +208,9 @@ int main(int argc, char *argv[]){
     annotationSlice->SetDirection(inputImage->GetDirection());
 
     //FOR DEBUGGING - Save the slice locally, until I feel more confident
-    writeImage(atlasSlice, "/home/sam/Desktop/extractedSlice.jpg");
-    writeImage(annotationSlice, "/home/sam/Desktop/extAnnoSlice.jpg");
-    writeImage(inputImage, "/home/sam/Desktop/inputImage.jpg");
+    writeImage(atlasSlice, "/home/sam/Desktop/extractedSlice.png");
+    writeImage(annotationSlice, "/home/sam/Desktop/extAnnoSlice.png");
+    writeImage(inputImage, "/home/sam/Desktop/inputImage.png");
 
     RigidTransformType::Pointer rigidTransform = getRigidRegistrationTransform(inputImage, atlasSlice);
     
@@ -221,10 +227,10 @@ int main(int argc, char *argv[]){
 
     // Update, to resample the image so it can be used for the deformable registration
     rigidResampler->Update();
-    writeImage(rigidResampler->GetOutput(), "/home/sam/Desktop/afterRigidRegistration.jpg");
+    writeImage(rigidResampler->GetOutput(), "/home/sam/Desktop/afterRigidRegistration.png");
 
     // Compute a deformable registration transform using the resampled atlas slice and the input image
-    BSplineTransformType::Pointer deformableTransform = getBSPlineRegistrationResults(rigidResampler->GetOutput(), inputImage); // (movingImage, fixedImage)
+    BSplineTransformType::Pointer deformableTransform = computeBsplineTransform(rigidResampler->GetOutput(), inputImage); // (movingImage, fixedImage)
 
     ResampleFilterType::Pointer deformableResampler = ResampleFilterType::New();
     deformableResampler->SetTransform(deformableTransform);
@@ -244,10 +250,14 @@ int main(int argc, char *argv[]){
 //    // Add the warper to the pipeline
 //    demonsWarper->SetInput(deformableResampler->GetOutput());
 
+    // Output images need to be cast from float to char (uint8)
+    InternalToEightBitCasterType::Pointer caster = InternalToEightBitCasterType::New();
+    caster->SetInput(deformableResampler->GetOutput());
+
     // Write the registered reference image to the specified filepath
     WriterType::Pointer outputWriter = WriterType::New();
     outputWriter->SetFileName(argv[3]);
-    outputWriter->SetInput(deformableResampler->GetOutput());
+    outputWriter->SetInput(caster->GetOutput());
     outputWriter->Update();
 
     // Transform the annotated atlas slice and write the output to the specified filepath
@@ -270,8 +280,8 @@ int main(int argc, char *argv[]){
 
 ImageType::Pointer getCoronalAtlasSlice(int sliceIndex, const char * atlasPath) {
     // Declare 3D and 2D image types
-    typedef unsigned char AtlasPixelType;
-    typedef unsigned char SlicePixelType;
+    typedef float AtlasPixelType;
+    typedef float SlicePixelType;
     
     typedef itk::Image<AtlasPixelType, 3> AtlasImageType;
     typedef itk::Image<SlicePixelType, 2> SliceImageType;
@@ -431,31 +441,70 @@ RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inp
 }
 
 
-BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer movingImage, ImageType::Pointer fixedImage){
-    typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
-    typedef itk::NormalizedCorrelationImageToImageMetric<ImageType, ImageType> MetricType;
-    typedef itk::LinearInterpolateImageFunction<ImageType, double> InterpolatorType;
+BSplineTransformType::Pointer computeBsplineTransform(ImageType::Pointer movingImage, ImageType::Pointer fixedImage){
+    typedef itk::RegularStepGradientDescentOptimizerv4<double> OptimizerType;
+    typedef itk::MattesMutualInformationImageToImageMetricv4<ImageType, ImageType> MetricType;
     typedef itk::ImageRegistrationMethodv4<ImageType, ImageType, BSplineTransformType> RegistrationType;
     typedef BSplineTransformType::ParametersType ParametersType;
+    typedef itk::BSplineTransformInitializer<BSplineTransformType, ImageType> BSplineTransformInitializerType;
 
 
     // Instantiate the metric, optimizer, interpolator, transform and registration objects
     MetricType::Pointer metric = MetricType::New();
     OptimizerType::Pointer optimizer = OptimizerType::New();
-    InterpolatorType::Pointer interpolator = InterpolatorType::New();
     RegistrationType::Pointer registration = RegistrationType::New();
     BSplineTransformType::Pointer transform = BSplineTransformType::New();
+    BSplineTransformInitializerType::Pointer transformInitializer = BSplineTransformInitializerType::New();
+
+
+    // Calculate image physical dimensions and meshSize
+    BSplineTransformType::PhysicalDimensionsType fixedPhysicalDimensions;
+    BSplineTransformType::MeshSizeType meshSize;
+    BSplineTransformType::OriginType fixedOrigin = fixedImage->GetOrigin();
+    ImageType::SizeType fixedImageSize = fixedImage->GetLargestPossibleRegion().GetSize();
+    unsigned int numberOfGridNodesInOneDimension = 8;
+
+    for (int i = 0; i < 2; i++) {
+        fixedPhysicalDimensions[i] = (fixedImageSize[i] - 1) * fixedImage->GetSpacing()[i];
+    }
+    meshSize.Fill(numberOfGridNodesInOneDimension - BSplineOrder);
+
+    // Transform initial parameters are determined by the transformInitializer
+    transformInitializer->SetTransform(transform);
+    transformInitializer->SetImage(fixedImage);
+    transformInitializer->SetTransformDomainMeshSize(meshSize);
+    transformInitializer->InitializeTransform();
+
+    transform->SetIdentity();
+
+    //// Set the initial transform parameters
+    //const unsigned int numberOfParameters = transform->GetNumberOfParameters();
+    //ParametersType parameters(numberOfParameters);
+    //parameters.Fill(0.0);
+    //transform->SetParameters(parameters);
+    //registration->SetInitialTransformParameters(transform->GetParameters());
+
+    // Set Metic Parameters
+    metric->SetNumberOfHistogramBins(64);
+
+    // Specify the optimizer parameters
+    // optimizer->MaximizeOff();  // Not used for v4 optimizer
+    optimizer->SetMinimumStepLength(0.001);
+    optimizer->SetRelaxationFactor(0.7);
+    optimizer->SetNumberOfIterations(200);
+    optimizer->SetLearningRate(16);
+
+    //BSplineTransformIterationUpdate::Pointer observer = BSplineTransformIterationUpdate::New();
+    //optimizer->AddObserver(itk::IterationEvent(), observer);
 
     // Connect everything to the registration object
     registration->SetMetric(metric);
     registration->SetOptimizer(optimizer);
-    registration->SetInterpolator(interpolator);
-    registration->SetTransform(transform);
+    registration->SetInitialTransform(transform);
 
     // Connect the filters to the registration object
     registration->SetFixedImage(fixedImage);
     registration->SetMovingImage(movingImage);
-    registration->SetFixedImageRegion(fixedImage->GetBufferedRegion());
 
     // Set Multi-Resolution Options
     // The shrink factor denotes to the factor by which the image will be downsized
@@ -470,48 +519,13 @@ BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer m
 
     RegistrationType::SmoothingSigmasArrayType smoothingSigmaPerLevel;
     smoothingSigmaPerLevel.SetSize(numberOfLevels);
-    smoothingSigmaPerLevel[0] = 5;
-    smoothingSigmaPerLevel[1] = 3;
+    smoothingSigmaPerLevel[0] = 4;
+    smoothingSigmaPerLevel[1] = 2;
     smoothingSigmaPerLevel[2] = 0;
 
     registration->SetNumberOfLevels(numberOfLevels);
     registration->SetShrinkFactorsPerLevel(shrinkFactorPerLevel);
     registration->SetSmoothingSigmasPerLevel(smoothingSigmaPerLevel);
-
-    // Calculate image physical dimensions and meshSize
-    BSplineTransformType::PhysicalDimensionsType fixedPhysicalDimensions;
-    BSplineTransformType::MeshSizeType meshSize;
-    BSplineTransformType::OriginType fixedOrigin = fixedImage->GetOrigin();
-    ImageType::SizeType fixedImageSize = fixedImage->GetLargestPossibleRegion().GetSize();
-    unsigned int numberOfGridNodesInOneDimension = 8;
-
-    for (int i = 0; i < 2; i++) {
-        fixedPhysicalDimensions[i] = (fixedImageSize[i] - 1) * fixedImage->GetSpacing()[i];
-    }
-    meshSize.Fill(numberOfGridNodesInOneDimension - BSplineOrder);
-
-    // Define the transform domain
-    transform->SetTransformDomainOrigin(fixedOrigin);
-    transform->SetTransformDomainPhysicalDimensions(fixedPhysicalDimensions);
-    transform->SetTransformDomainMeshSize(meshSize);
-    transform->SetTransformDomainDirection(fixedImage->GetDirection());
-
-    // Set the initial transform parameters
-    const unsigned int numberOfParameters = transform->GetNumberOfParameters();
-    ParametersType parameters(numberOfParameters);
-    parameters.Fill(0.0);
-    transform->SetParameters(parameters);
-    registration->SetInitialTransformParameters(transform->GetParameters());
-
-    // Specify the optimizer parameters
-    // optimizer->MaximizeOff();  // Not used for v4 optimizer
-    optimizer->SetMaximumStepLength(25.0);
-    optimizer->SetMinimumStepLength(0.001);
-    optimizer->SetRelaxationFactor(0.7);
-    optimizer->SetNumberOfIterations(200);
-
-    BSplineTransformIterationUpdate::Pointer observer = BSplineTransformIterationUpdate::New();
-    optimizer->AddObserver(itk::IterationEvent(), observer);
 
     // Prepare time and memory probes
     itk::TimeProbesCollectorBase chronometer;
@@ -537,13 +551,12 @@ BSplineTransformType::Pointer getBSPlineRegistrationResults(ImageType::Pointer m
         throw 1337;
     }
 
-    // Return the computed transform
-    OptimizerType::ParametersType finalParameters = registration->GetLastTransformParameters();
+    // Display and return the computed transform
+    OptimizerType::ParametersType finalParameters = transform->GetParameters();
 
     std::cout << "Final BSpline Transform Parameters" << std::endl;
     std::cout << finalParameters << std::endl;
 
-    transform->SetParameters(finalParameters);
     return transform;
 }
 
@@ -614,10 +627,14 @@ WarperType::Pointer createAndConfigureDemonsWarper(DisplacementFieldType::Pointe
 
 
 void writeImage(ImageType::Pointer im, const char * path) {
-    typedef itk::ImageFileWriter<ImageType> WriterType;
+    typedef itk::ImageFileWriter<EightBitImageType> WriterType;
+
+    InternalToEightBitCasterType::Pointer caster = InternalToEightBitCasterType::New();
+    caster->SetInput(im);
+
     WriterType::Pointer fileWriter = WriterType::New();
     fileWriter->SetFileName(path);
-    fileWriter->SetInput(im);
+    fileWriter->SetInput(caster->GetOutput());
     fileWriter->Update();
 }
 
