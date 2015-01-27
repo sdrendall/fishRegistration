@@ -61,7 +61,6 @@ function registrationReviewGUI_OpeningFcn(hObject, eventdata, handles, varargin)
     % UIWAIT makes registrationReviewGUI wait for user response (see UIRESUME)
     % uiwait(handles.figure1);
     
-    
 % --- Outputs from this function are returned to the command line.
 function varargout = registrationReviewGUI_OutputFcn(hObject, eventdata, handles) 
     % varargout  cell array for returning output args (see VARARGOUT);
@@ -69,25 +68,28 @@ function varargout = registrationReviewGUI_OutputFcn(hObject, eventdata, handles
     % Get default command line output from handles structure
     varargout{1} = handles.output;
 
-
 % --- Executes on button press in nextIm.
 function nextIm_Callback(hObject, eventdata, handles)
+    updateJson(handles);
     if handles.currentSetNo == handles.numberOfSets
         nextSetNo = 1;
     else
         nextSetNo = handles.currentSetNo + 1;
     end
+    handles = loadScores(hObject, handles);
     handles = setCurrentImageSet(hObject, handles, nextSetNo);
     handles = loadCurrentImageSet(hObject, handles);
     refreshDisplay(handles)
 
 % --- Executes on button press in prevIm.
 function prevIm_Callback(hObject, eventdata, handles)
+    updateJson(handles);
     if handles.currentSetNo == 1
         nextSetNo = handles.numberOfSets;
     else 
         nextSetNo = handles.currentSetNo + 1;
     end
+    handles = loadScores(hObject, handles);
     handles = setCurrentImageSet(hObject, handles, nextSetNo);
     handles = loadCurrentImageSet(hObject, handles);
     refreshDisplay(handles)
@@ -180,6 +182,10 @@ function refreshDisplay(handles)
         imshow(handles.overlayIm)
     end
 
+function refreshScores(handles)
+    currentSet = handles.jsonData{handles.currentSetNo};
+    set(handles.registrationQualityScore, currentSet.registrationQualityScore)
+
 function handles = regenerateOverlay(hObject, handles)
     % Checks the status of the overlay checkboxes, and generates an overlay image
     % Does not refresh the display
@@ -227,6 +233,20 @@ function im = getRegistrationImage(handles, imPath)
     % image with the filename specified in imPath, located in the directory where the json file was read from.
     imName = getFilename(imPath);
     im = imread(fullfile(handles.basePath, imName));
+
+function handles = loadScores(hObject, handles)
+    currentSet = handles.jsonData{handles.currentSetNo};
+    if ~isfield(currentSet, 'sliceUsable')
+        currentSet.sliceUsable = 'no';
+    end
+    if ~isfield(currentSet, 'registrationQualityScore')
+        currentSet.registrationQualityScore = 5
+    end
+    handles.jsonData{handles.currentSetNo} = currentSet;
+    refreshScores(handles)
+
+function updateJson(handles)
+    savejson('', handles.jsonData, handles.jsonPath);
 
 function handles = loadJsonData(hObject, handles)
     % Load data from the json file in the specified location
