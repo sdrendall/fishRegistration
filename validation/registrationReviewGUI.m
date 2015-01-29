@@ -22,7 +22,7 @@ function varargout = registrationReviewGUI(varargin)
     
     % Edit the above text to modify the response to help registrationReviewGUI
     
-    % Last Modified by GUIDE v2.5 26-Jan-2015 17:47:38
+    % Last Modified by GUIDE v2.5 29-Jan-2015 16:53:29
     
     % Begin initialization code - DO NOT EDIT
     gui_Singleton = 1;
@@ -71,28 +71,30 @@ function varargout = registrationReviewGUI_OutputFcn(hObject, eventdata, handles
 % --- Executes on button press in nextIm.
 function nextIm_Callback(hObject, eventdata, handles)
     updateJson(handles);
-    if handles.currentSetNo == handles.numberOfSets
-        nextSetNo = 1;
+    if handles.currentKeyIndex == handles.numberOfKeys
+        nextSetKeyIndex = 1;
     else
-        nextSetNo = handles.currentSetNo + 1;
+        nextSetKeyIndex = handles.currentKeyIndex + 1;
     end
-    handles = loadScores(hObject, handles);
-    handles = setCurrentImageSet(hObject, handles, nextSetNo);
+    handles = setCurrentImageSet(hObject, handles, nextSetKeyIndex);
     handles = loadCurrentImageSet(hObject, handles);
+    handles = loadScores(hObject, handles);
     refreshDisplay(handles)
+    refreshScores(handles)
 
 % --- Executes on button press in prevIm.
 function prevIm_Callback(hObject, eventdata, handles)
     updateJson(handles);
-    if handles.currentSetNo == 1
-        nextSetNo = handles.numberOfSets;
+    if handles.currentKeyIndex == 1
+        nextSetKeyIndex = handles.numberOfKeys;
     else 
-        nextSetNo = handles.currentSetNo + 1;
+        nextSetKeyIndex = handles.currentKeyIndex - 1;
     end
-    handles = loadScores(hObject, handles);
-    handles = setCurrentImageSet(hObject, handles, nextSetNo);
+    handles = setCurrentImageSet(hObject, handles, nextSetKeyIndex);
     handles = loadCurrentImageSet(hObject, handles);
+    handles = loadScores(hObject, handles);
     refreshDisplay(handles)
+    refreshScores(handles)
 
 % --- Executes on button press in showReference.
 function showReference_Callback(hObject, eventdata, handles)
@@ -109,32 +111,51 @@ function showLabels_Callback(hObject, eventdata, handles)
     handles = setImageToDisplay(hObject, handles, 'labels');
     refreshDisplay(handles)
 
+% --- Executes when selected object is changed in sliceRating.
+function sliceRating_SelectionChangeFcn(hObject, eventdata, handles)
+    % Update the metadata with the value of the selected radiobutton
+    currentSet = handles.jsonData{handles.currentSetNo};
+    switch get(eventdata.NewValue, 'Tag')
+        case 'fullyUsable'
+            currentSet.sliceUsable = 'yes';
+        case 'partiallyUsable'
+            currentSet.sliceUsable = 'partially';
+        case 'notUsable'
+            currentSet.sliceUsable = 'no';
+    end       
+    handles.jsonData{handles.currentSetNo} = currentSet;
+    guidata(hObject, handles)
+
 function registrationQualityScore_Callback(hObject, eventdata, handles)
 % Hints: get(hObject,'String') returns contents of registrationQualityScore as text
 %        str2double(get(hObject,'String')) returns contents of registrationQualityScore as a double
-
+        currentSet = handles.jsonData{handles.currentSetNo};
+        currentSet.registrationQualityScore = str2double(get(hObject, 'String'));
+        handles.jsonData{handles.currentSetNo} = currentSet;
+        guidata(hObject, handles)    
 
 % --- Executes during object creation, after setting all properties.
 function registrationQualityScore_CreateFcn(hObject, eventdata, handles)
 
 % Hint: edit controls usually have a white background on Windows.
 %       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
+    if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+        set(hObject,'BackgroundColor','white');
+    end
 
 % --- Executes on button press in loadData.
 function loadData_Callback(hObject, eventdata, handles)
     try
-        handles = loadJsonData(hObject, handles);
+       handles = loadJsonData(hObject, handles);
     catch err
         disp('loadData failed')
         return
     end
     handles = setCurrentImageSet(hObject, handles, 1);
     handles = loadCurrentImageSet(hObject, handles);
+    handles = loadScores(hObject, handles);
     refreshDisplay(handles)
+    refreshScores(handles)
 
 % --- Executes on button press in overlaySlice.
 function overlaySlice_Callback(hObject, eventdata, handles)
@@ -162,7 +183,9 @@ function handles = setImageToDisplay(hObject, handles, value)
     guidata(hObject, handles)
 
 function handles = setCurrentImageSet(hObject, handles, index)
-    handles.currentSetNo = index;
+    handles.currentKeyIndex = index;
+    key = handles.jsonKeys(index);
+    handles.currentSetNo = key;
     guidata(hObject, handles)
 
 function refreshDisplay(handles)
@@ -170,28 +193,36 @@ function refreshDisplay(handles)
     axes(handles.mainDisplay)
 
     switch handles.imageToDisplay
-    case 'slice'
-        imshow(handles.sliceIm, [])
-    case 'reference'
-        imshow(handles.refIm, [])
-    case 'labels'
-        imagesc(handles.labelIm)
-        colormap(lines)
-        axis off
-    case 'overlay'
-        imshow(handles.overlayIm)
+        case 'slice'
+            imshow(handles.sliceIm, [])
+        case 'reference'
+            imshow(handles.refIm, [])
+        case 'labels'
+            imagesc(handles.labelIm)
+            colormap(lines)
+            axis off
+        case 'overlay'
+            imshow(handles.overlayIm)
     end
 
 function refreshScores(handles)
     currentSet = handles.jsonData{handles.currentSetNo};
-    set(handles.registrationQualityScore, currentSet.registrationQualityScore)
+    set(handles.registrationQualityScore,'String', num2str(currentSet.registrationQualityScore))
+    switch currentSet.sliceUsable
+        case 'yes'
+            set(handles.fullyUsable, 'Value', 1)
+        case 'partially'
+            set(handles.partiallyUsable, 'Value', 1)
+        case 'no'
+            set(handles.notUsable, 'Value', 1)
+    end
 
 function handles = regenerateOverlay(hObject, handles)
     % Checks the status of the overlay checkboxes, and generates an overlay image
     % Does not refresh the display
     overlay = zeros([size(handles.refIm), 3]);
     if get(handles.overlaySlice, 'value')
-        overlay(:,:,3) = mat2gray(handles.sliceIm);
+        overlay(:,:,2) = mat2gray(handles.sliceIm);
     end
     if get(handles.overlayReference, 'value')
         overlay(:,:,1) = mat2gray(handles.refIm);
@@ -240,9 +271,10 @@ function handles = loadScores(hObject, handles)
         currentSet.sliceUsable = 'no';
     end
     if ~isfield(currentSet, 'registrationQualityScore')
-        currentSet.registrationQualityScore = 5
+        currentSet.registrationQualityScore = 5;
     end
     handles.jsonData{handles.currentSetNo} = currentSet;
+    guidata(hObject, handles)
     refreshScores(handles)
 
 function updateJson(handles)
@@ -257,9 +289,9 @@ function handles = loadJsonData(hObject, handles)
         rethrow(err)
     end
     disp(['Loading data from ', handles.jsonPath])
-    jsonData = loadjson(handles.jsonPath);
-    handles.jsonData = cleanJsonData(jsonData);
-    handles.numberOfSets = length(handles.jsonData);
+    handles.jsonData = loadjson(handles.jsonPath);
+    handles.jsonKeys = getCleanJsonDataKeys(handles.jsonData);
+    handles.numberOfKeys = length(handles.jsonKeys);
 
     % Update the handles object
     guidata(hObject, handles)
@@ -267,12 +299,14 @@ function handles = loadJsonData(hObject, handles)
 function [basePath, jsonPath] = getJsonPath()
     % Query user for the experiment path
     basePath = uigetdir();
+    % Cancel loading if the user closes the dialog box
     if ~ischar(basePath) % uigetdir returns 0 if the action is cancelled.  
         throw(MException('LoadActionTerminated', 'LoadData was terminated by the user'))
     end
     jsonPath = searchForJson(basePath);
 
 function jsonPath = searchForJson(basePath)
+    % Finds json files in the directory at basePath
     jsonFiles = dir(fullfile(basePath, '*.json')); % I'll make this recursive if things get more complicated
     jsonFile = chooseJsonFile(jsonFiles);              % If multiple files are returned, one must be chosen.  This will also handle warnings
     jsonPath = fullfile(basePath, jsonFile.name);
@@ -296,13 +330,16 @@ function jsonFile = chooseJsonFile(jsonFiles)
         jsonFile = jsonFiles;
     end
 
-function outputData = cleanJsonData(inputData)
-	outputData = {};
-	for i = 1:length(inputData)
-		if ~inputData{i}.exclude && inputData{i}.registrationSuccessful
-			outputData(end + 1) = inputData(i);
-		end
-	end
+function keys = getCleanJsonDataKeys(inputData)
+    % Generates an array of indicies corresponding to the metadata for usable image sets
+    % Eliminating these sets would cause them to be removed when the json file is updated
+    % Using the currently stored data.
+    keys = [];
+    for i = 1:length(inputData)
+        if ~inputData{i}.exclude && inputData{i}.registrationSuccessful
+            keys(end + 1) = i;
+        end
+    end
 
 function filename = getFilename(filePath)
     % Returns the filename, with extension, of a file located at filePath
