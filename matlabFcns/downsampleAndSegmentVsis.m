@@ -22,32 +22,27 @@ function downsampleAndSegmentVsis(jsonPath)
     for i = 1:length(imageData)
         %% Load data
         s = imageData{i};
-        im = loadDapiFromVsi(s.vsiPath);
-        showMinMax(im)
-
-        %% Calculate background noise statistics
-        %[avg, sDev] = getBackgroundStats(im);
+        dapi = loadPlaneFromVsi(s.vsiPath, 1);
+        fitc = loadPlaneFromVsi(s.vsiPath, 2);
 
         %% Find the brain section
-        section = findBrainSection(im);
-        im(~section) = 0;
+        fitc = downsampleToAtlasScale(fitc);
+        fitc = mat2gray(fitc);
+        section = findBrainSection_AC(fitc);
 
-        %% Downsample, flip, flop, and pad
-        im = downsampleToAtlasScale(im);
-        showMinMax(im)
-        im = flipflop(im);
-        showMinMax(im)
-        im = padToAtlasSize(im);
-        showMinMax(im)
-        %im = convertZerosToNoise(im, avg, sDev);
-        %showMinMax(im)
+        %% Downsample, segment brain section, and flip, flop
+        dapi = downsampleToAtlasScale(dapi);
+        dapi(~section) = 0;
+        dapi = flipflop(dapi);
+
+        %% Pad the resulting image with zeros so it matches the size of the ABA
+        dapi = padToAtlasSize(dapi);
 
         %% Save as 8-bit png
-        im = convertToUint8(im);
-        showMinMax(im)
+        dapi = convertToUint8(dapi);
         outputPath = generateoutputPath(jsonPath, s.vsiPath);
-        %formatAndSaveMhd(im, outputPath);
-        imwrite(im, outputPath)
+        %formatAndSaveMhd(dapi, outputPath);
+        imwrite(dapi, outputPath)
 
         %% Update JSON file
         disp('Updating JSON file.....')
@@ -60,10 +55,10 @@ function downsampleAndSegmentVsis(jsonPath)
     end
 
 
-function im = loadDapiFromVsi(vsiPath)
-    disp(['Loading ', vsiPath, '.....'])
+function im = loadPlaneFromVsi(vsiPath, plane)
+    disp(['Loading plane ', num2str(plane), ' from ', vsiPath, '.....'])
     r = bfGetReader(vsiPath);
-    im = bfGetPlane(r, 1);
+    im = bfGetPlane(r, plane);
 
 function im = downsampleToAtlasScale(im)
     disp('Downsizing image.....')

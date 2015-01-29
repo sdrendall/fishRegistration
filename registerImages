@@ -61,11 +61,11 @@ def registerImage(imdata, expPath):
 
 def generateReferenceImagePath(downsampledImagePath):
     outputPath = os.path.splitext(downsampledImagePath)[0] #remove suffix
-    return outputPath[:-12] + u'_registeredAtlasReferenceImage.png' # remove '_downsampled'
+    return outputPath[:-12] + u'_registeredAtlasReferenceImage.mhd' # remove '_downsampled'
     
 def generateLabelsPath(downsampledImagePath):
     outputPath = os.path.splitext(downsampledImagePath)[0] #remove suffix
-    return outputPath[:-12] + u'_registeredAtlasLabels.png' # remove '_downsampled'
+    return outputPath[:-12] + u'_registeredAtlasLabels.mhd' # remove '_downsampled'
 
 def loadJson(jsonPath):
     jsonFile = open(jsonPath)

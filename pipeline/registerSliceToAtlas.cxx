@@ -31,7 +31,8 @@ const char * atlasReferencePath = "/home/sam/Pictures/allenReferenceAtlas_mouseC
 const char * atlasLabelsPath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/annotation.mhd";
 const unsigned int BSplineOrder = 3;
 
-typedef itk::Image<unsigned char, 2> ImageType;
+typedef unsigned int ImagePixelType;
+typedef itk::Image<ImagePixelType, 2> ImageType;
 typedef itk::CenteredRigid2DTransform<double> RigidTransformType;
 typedef itk::BSplineTransform<double, 2, BSplineOrder> BSplineTransformType; // <CoordinateRepType, Dims, BSplineOrder>
 
@@ -166,7 +167,7 @@ int main(int argc, char *argv[]){
     if (argc < 5) {
             std::cerr << "Missing Parameters " << std::endl;
             std::cerr << "Usage: " << argv[0];
-            std::cerr << " fixedImage RRRAGGGGHHHH";
+            std::cerr << " fixedImage sliceIndex";
             std::cerr << " outputAtlasImage outputAtlasLabels";
             return EXIT_FAILURE;
     }
@@ -266,13 +267,10 @@ int main(int argc, char *argv[]){
 }
 
 
-ImageType::Pointer getCoronalAtlasSlice(int RRRAGGGGHHHH, const char * atlasPath) {
+ImageType::Pointer getCoronalAtlasSlice(int sliceIndex, const char * atlasPath) {
     // Declare 3D and 2D image types
-    typedef unsigned char AtlasPixelType;
-    typedef unsigned char SlicePixelType;
-    
-    typedef itk::Image<AtlasPixelType, 3> AtlasImageType;
-    typedef itk::Image<SlicePixelType, 2> SliceImageType;
+    typedef itk::Image<ImagePixelType, 3> AtlasImageType;
+    typedef itk::Image<ImagePixelType, 2> SliceImageType;
     
     // Declare Readers and Writers for 3D images and 2D images respectively
     typedef itk::ImageFileReader<AtlasImageType> AtlasReaderType;
@@ -300,7 +298,7 @@ ImageType::Pointer getCoronalAtlasSlice(int RRRAGGGGHHHH, const char * atlasPath
     // Get Start Point
     AtlasImageType::IndexType sliceStartIndex = entireAtlasRegion.GetIndex();
     sliceStartIndex.Fill(0);
-    sliceStartIndex[axisToCollapse] = RRRAGGGGHHHH;  // Switched to slice index, I'll change this later
+    sliceStartIndex[axisToCollapse] = sliceIndex;  // Switched to slice index, I'll change this later
     
     // Initialize a slice region
     AtlasImageType::RegionType sliceRegion(sliceStartIndex, sliceSize);

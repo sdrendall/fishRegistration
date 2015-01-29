@@ -201,6 +201,7 @@ function refreshDisplay(handles)
             imagesc(handles.labelIm)
             colormap(lines)
             axis off
+            axis equal
         case 'overlay'
             imshow(handles.overlayIm)
     end
@@ -263,7 +264,17 @@ function im = getRegistrationImage(handles, imPath)
     % are in the same folder as the .json file the metadata is being read from.  This function attempts to load the 
     % image with the filename specified in imPath, located in the directory where the json file was read from.
     imName = getFilename(imPath);
-    im = imread(fullfile(handles.basePath, imName));
+    im = readImage(fullfile(handles.basePath, imName));
+
+function im = readImage(filepath)
+    % Uses the appropriate load function based on the filetype found at the filepath
+    [~, ~, ext] = fileparts(filepath);
+    if strcmpi(ext, '.mhd')
+        imageObj = read_mhd(filepath);
+        im = imageObj.data';
+    else
+        im = imread(filepath);
+    end
 
 function handles = loadScores(hObject, handles)
     currentSet = handles.jsonData{handles.currentSetNo};
