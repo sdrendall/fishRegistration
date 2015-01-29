@@ -201,6 +201,7 @@ function refreshDisplay(handles)
             imagesc(handles.labelIm)
             colormap(lines)
             axis off
+            axis equal
         case 'overlay'
             imshow(handles.overlayIm)
     end
