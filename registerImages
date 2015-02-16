@@ -6,8 +6,9 @@ import subprocess as sp
 def generateParser():
     parser = argparse.ArgumentParser(
         description="A script to register images to the Allen Brain Atlas using ITK.")
-    parser.add_argument('-e', '--experimentPath', default='.')
+    parser.add_argument('-e', '--experimentPath', default=os.path.abspath('.'))
     parser.add_argument('-b', '--useBatch', action='store_true')
+    return parser
 
 def generateJsonPath(expPath):
     return os.path.join(expPath, '.registrationData' ,'metadata.json')
@@ -87,7 +88,7 @@ def updateJson(jsonPath, dictList):
 def main():
     parser = generateParser()
     args = parser.parse_args()
-    expPath = args['experimentPath']
+    expPath = args.experimentPath
 
     if isInvalidExperimentPath(expPath):
         print "Invalid Experiment Path:"
