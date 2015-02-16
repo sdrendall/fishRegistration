@@ -105,7 +105,7 @@ def main():
     for imdata in dictList:
         if imdata['exclude'] == 0:
             # Run registration pipeline
-            registerImage(imdata, expPath, submitJob=args['useBatch'])
+            registerImage(imdata, expPath, submitJob=args.useBatch)
             # Update JSON file
             updateJson(jsonPath, dictList)
         else:
