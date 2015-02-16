@@ -33,13 +33,13 @@ def generateReferenceOutputPaths(imdata):
 
 def registerImage(imdata, expPath, submitJob=False):
     generateReferenceOutputPaths(imdata)
-    argList = generateargListing(imdata)
+    argList = generateArgList(imdata)
     if submitJob:
-        openRegistrationProcess_bsub(argList, expPath)
+        openRegistrationProcess_bsub(imdata, argList, expPath)
     else:
-        openRegistrationProcess_local(argList, expPath)
+        openRegistrationProcess_local(imdata, argList, expPath)
 
-def openRegistrationProcess_local(argList, expPath):
+def openRegistrationProcess_local(imdata, argList, expPath):
     try:
         print "Registering %s......" % imdata['downsampledImagePath']
         sp.check_output(argList, shell=True, cwd=expPath, env=os.environ)
@@ -51,11 +51,11 @@ def openRegistrationProcess_local(argList, expPath):
     else:
         imdata['registrationSuccessful'] = True
 
-def openRegsistrationProcess_bsub(argList, expPath):
+def openRegistrationProcess_bsub(imdata, argList, expPath):
     argList = 'bsub -q short -W 0:40 -R "rusage[mem=500]" -n 4'.split() + argList
     try:
         sp.check_call(argList, cwd=expPath, env=os.environ)
-    except e:
+    except:
         print 'Job submission failed!'
         imdata['registrationSuccessful'] = False
     else:
