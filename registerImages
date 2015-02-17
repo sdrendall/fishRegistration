@@ -52,7 +52,8 @@ def openRegistrationProcess_local(imdata, argList, expPath):
         imdata['registrationSuccessful'] = True
 
 def openRegistrationProcess_bsub(imdata, argList, expPath):
-    argList = 'bsub -q short -W 0:40 -R "rusage[mem=500]" -n 4'.split() + argList
+    argList = 'bsub -q short -W 0:40 -R "rusage[mem=4000]" -n 4'.split() + argList
+    print ' '.join(argList)
     try:
         sp.check_call(argList, cwd=expPath, env=os.environ)
     except:
