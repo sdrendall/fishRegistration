@@ -1,48 +1,45 @@
-function downsampleAndSegmentVsis(jsonPath)
-    %% downsampleAndSegmentVsis(jsonPath)
+function downsampleAndSegmentVsis(jsonPath, varargin)
+    %% downsampleAndSegmentVsis(jsonPath, options)
     %
-    % Parses JSON file located at jsonPath
-    %
-    % File should consist of a cell array of structures, each with the field vsiPath
-    %   which denotes the .vsi file to be preprocessed
-    %
-    % Preprocessing of each file specified includes:
-    %   1. The Dapi (or nissl) channel is loaded from each vsi
-    %   2. Image is normalized so that it fills the full range of the output bitdepth
-    %   3. Image is downsized such that each pixel represents 25um x 25um of physical space
-    %   4. Image is padded with zeros to be at least the same size as coronal images in the Allen Brain Atals (456 x 320)
-    %   5. Zeros are replaced with poisson noise
-    %   6. Image is saved as an 8-bit png file in the directory containing the JSON file at jsonPath
-    %
-    %   The JSON file is updated after each iteration to include the path to the downsampled image
+
+    % TODO, help text!!!
+    
+    args = parseVarargin(nargin, varargin);
 
     %% Load image data from the JSON file
     imageData = loadjson(jsonPath);
 
     for i = 1:length(imageData)
         %% Load data
-        s = imageData{i};
-        dapi = loadPlaneFromVsi(s.vsiPath, 1);
-        fitc = loadPlaneFromVsi(s.vsiPath, 2);
+        currentImData = imageData{i};
 
-        %% Find the brain section
-        fitc = downsampleToAtlasScale(fitc);
-        fitc = mat2gray(fitc);
-        section = findBrainSection_AC(fitc);
+        %% Find the brain section in the segmentation image
+        segIm = loadPlaneFromVsi(currentImData.vsiPath, args.segmentationPlane);
+        segIm = downsampleToAtlasScale(segIm);
+        segIm = mat2gray(segIm);
+        section = findBrainSection_AC(segIm);
 
-        %% Downsample, segment brain section, and flip, flop
-        dapi = downsampleToAtlasScale(dapi);
-        dapi(~section) = 0;
-        dapi = flipflop(dapi);
+        %% Load and Process the registration image
+        % Downsample, segment brain section, and flip, flop
+        regIm = loadPlaneFromVsi(currentImData.vsiPath, args.registrationPlane);
+        regIm = downsampleToAtlasScale(regIm);
+        regIm(~section) = 0;
+        if args.flip && args.flop
+            regIm = flipflop(regIm);
+        elseif args.flip
+            regIm = flip(regIm);
+        elseif args.flop
+            regIm = flop(regIm);
+        end
 
         %% Pad the resulting image with zeros so it matches the size of the ABA
-        dapi = padToAtlasSize(dapi);
+        regIm = padToAtlasSize(regIm);
 
-        %% Save as 8-bit png
-        dapi = convertToUint8(dapi);
-        outputPath = generateoutputPath(jsonPath, s.vsiPath);
-        %formatAndSaveMhd(dapi, outputPath);
-        imwrite(dapi, outputPath)
+        %% Save as 8-bit mhd
+        %regIm = convertToUint8(regIm);
+        %outputPath = generateoutputPath(jsonPath, s.vsiPath);
+        formatAndSaveMhd(regIm, outputPath);
+        imwrite(regIm, outputPath)
 
         %% Update JSON file
         disp('Updating JSON file.....')
@@ -54,6 +51,32 @@ function downsampleAndSegmentVsis(jsonPath)
         savejson('', imageData, jsonPath);
     end
 
+function args = parseVarargin(argc, argv)
+    % Set defaults
+    args = struct( ...
+        'flip', false, ...
+        'flop', false, ...
+        'registrationPlane', 1, ...
+        'segmentationPlane', 2)
+
+    % Iterate though the input arguments until none are left
+    i = 1;
+    while i <= argc - 1;
+        switch lower(argv{i})
+        case 'flip'
+            args.flip = true;
+            i = i + 1;
+        case 'flop'
+            args.flop = true;
+            i = i + 1;
+        case 'registrationplane'
+            args.registrationPlane = str2num(argv{i + 1});
+            i = i + 2;
+        case 'segmentationplane'
+            args.segmentationPlane = str2num(argv{i + 1});
+            i = i + 2;
+        end
+    end
 
 function im = loadPlaneFromVsi(vsiPath, plane)
     disp(['Loading plane ', num2str(plane), ' from ', vsiPath, '.....'])
@@ -68,7 +91,16 @@ function im = downsampleToAtlasScale(im)
     im = imresize(im, atlasScale);
 
 function im = flipflop(im)
+    % flips the image vertically and horizontally
     im = im(end:-1:1, end:-1:1);
+
+function im = flip(im)
+    % flips the image vertically
+    im = im(end:-1:1, :);
+
+function im = flop(im)
+    % flips the image horizontally
+    im = im(:, end:-1:1);
 
 function im = padToAtlasSize(im)
     disp('Padding to atlas size.....')
@@ -131,7 +163,7 @@ function formatAndSaveMhd(data, outputPath)
 
 function img = generateMhdImage(data)
     s = size(data);
-    origin = [1 1];
+    origin = [0 0];
     spacing = [25 25];
     orientation =[1 0; 0 1];
 

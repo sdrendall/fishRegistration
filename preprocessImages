@@ -2,30 +2,30 @@
 
 from sys import argv
 import subprocess as sp
-import os, json, glob
+import os, json, glob, argparse
 
-def checkArgs():
-    if len(argv) < 2:
-        print "Running with current directory as root experiment directory!"
-    elif len(argv) > 2:
-        print "Too many input arguments!"
-        printProperUsage()
-        return False
-    elif not os.path.isdir(os.path.abspath(argv[1])):
-        print "Specified experimentPath does not exist!"
-        printProperUsage()
-        return False
-    return True
+def generateParser():
+    parser = argparse.ArgumentParser(
+        description='The first script to be called in the image registration pipeline. \n\
+        This script should be run from the root directory of the directory heirarchy \
+         containing all images to be registered.')
+    parser.add_argument('experimentPath', default=os.path.abspath('.'),
+        help='Specifies the root directory containing the data to be processed.  Defaults to the current directory.')
+    parser.add_argument('-b', '--useBatch', default=False, action='store_true',
+        help='Parallelizes computation by submitting jobs to an LSF queue, using the bsub command.')
+    parser.add_argument('--flip', default=0, action='store_const', const=1,
+        help='Flips the image vertically during preprocessing')
+    parser.add_argument('--flop', default=0, action='store_const', const=1,
+        help='Flips the image horizontally during preprocessing')
+    parser.add_argument('-p', '--registrationPlane', default=1, type=int,
+        help='The image plane (channel) to be registered to the atlas.\
+          Ideally, this plane contains an image of some sort of nuclear stain (DAPI, Hoechst, NISSL...) should be used')
+    parser.add_argument('-s', '--segmentationPlane', default=2, type=int,
+        help='The plane (channel) to be used to segment the brain section in the image from the background.\
+          Ideally this plane contains an image with high tissue autofluorescence (green), and relatively sparse staining')
 
-def printProperUsage():
-    print "Proper Usage:"
-    print "%s [experimentPath]" % argv[0]
+    return parser
 
-def getExperimentPath():
-    if len(argv) == 2:
-        return os.path.abspath(argv[1])
-    else:
-        return os.path.abspath('.')
 
 def createDataDirectory(expPath):
     dataPath = os.path.join(expPath, '.registrationData')
@@ -60,27 +60,45 @@ def findVsis(expPath):
                 vsiPaths.append(relPath)
     return vsiPaths
 
+def preprocess_local():
+
+    argStr = 'matlab -nosplash -nodesktop -r "downsampleAndSegmentVsis(\'{}\'); exit"'.format(jsonPath)
+    print "argStr: " + argStr
+    sp.call(argStr, shell=True, cwd=experimentPath, env=os.environ)
+
+def generatePreprocessingArgs(jsonPath, inputArgs):
+    argStr = "matlab -nosplash -nodesktop -r \"downsampleAndSegmentVsis('%s', 'flip', {flip}, 'flop', {flop}, \
+        'registrationPlane', {registrationPlane}, 'segmentationPlane', {segmentationPlane})\"; exit" % jsonPath
+    argStr.format(**inputArgs)
+
+    if inputArgs.useBatch:
+        argStr = 'bsub -q short -W 0:30 -R "rusage[mem=4000]" ' + argStr
+
+    return argStr
+
+
 def main():
-    argsValid = checkArgs()
-    if not argsValid:
-        return
-    # Load filenames, and create the json file and the containing directory
-    experimentPath = getExperimentPath()
-    dataPath = createDataDirectory(experimentPath)
-    vsiPaths = findVsis(experimentPath)
+    parser = generateParser()
+    args = parser.parse_args()
+
+    dataPath = createDataDirectory(args.experimentPath)
+    vsiPaths = findVsis(args.experimentPath)
     jsonFile, jsonPath = createJsonFile(dataPath, vsiPaths)
     populateJsonFile(jsonFile, vsiPaths)
     jsonFile.close()
 
     # Call the matlab preprocessing function
-    argStr = 'matlab -nosplash -nodesktop -r "downsampleAndSegmentVsis(\'{}\'); exit"'.format(jsonPath)
-    print "argStr: " + argStr
-    sp.call(argStr, shell=True, cwd=experimentPath, env=os.environ)
+    preprocessingArgs = generatePreprocessingArgs(jsonPath, args)
+    sp.call(preProcessingArgs, shell=True, cwd=args.experimentPath, env=os.environ)
 
-    print "Preprocessing Complete!"
-    print "Experiment Root Path:", experimentPath
-    print "Data Path:", dataPath
-    print "JSON Path:", jsonPath
+    if not args.useBatch:
+        print "Preprocessing Complete!"
+        print "Experiment Root Path:", experimentPath
+        print "Data Path:", dataPath
+        print "JSON Path:", jsonPath
+    else:
+        print "Preprocessing jobs submitted."
+        print "Please wait for all jobs to complete before continuing the registration pipeline"
     
 
 if __name__ == "__main__":
