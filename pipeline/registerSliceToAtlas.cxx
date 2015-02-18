@@ -33,12 +33,15 @@
 
 // Globals (TODO: Do this differently)
 const char * atlasReferencePath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/atlasVolume/atlasVolume.mhd";
-const char * atlasLabelsPath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/annotation.mhd";
+const char * atlasAnnotationsPath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/annotation.mhd";
 const unsigned int BSplineOrder = 3;
 
 // Types
 typedef float ImagePixelType;
 typedef itk::Image<ImagePixelType, 2> ImageType;
+
+typedef unsigned int AnnotationPixelType;
+typedef itk::Image<AnnotationPixelType, 2> AnnotationImageType;
 
 typedef itk::CenteredRigid2DTransform<double> RigidTransformType;
 typedef itk::BSplineTransform<double, 2, BSplineOrder> BSplineTransformType; // <CoordinateRepType, Dims, BSplineOrder>
@@ -48,9 +51,14 @@ typedef itk::CastImageFilter<ImageType, EightBitImageType> InternalToEightBitCas
 
 // Function Declarations
 ImageType::Pointer getCoronalAtlasSlice(int, const char *);
+AnnotationImageType::Pointer getCoronalAnnotationAtlasSlice(int, const char *);
 ImageType::Pointer rotateImage(ImageType::Pointer);
+AnnotationImageType::Pointer rotateAnnotationImage(AnnotationImageType::Pointer);
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
 BSplineTransformType::Pointer computeBsplineTransform(ImageType::Pointer, ImageType::Pointer, const char *);
+
+void applyTransformToAnnotations(RigidTransformType::Pointer, BSplineTransformType::Pointer, ImageType::Pointer, const char *, const char *, int);
+void applyTransformToReference(RigidTransformType::Pointer, BSplineTransformType::Pointer, ImageType::Pointer, const char *, const char *, int);
 
 void writeImage(ImageType::Pointer, const char *);
 void displayRegistrationResults(itk::OptimizerParameters<double>, const unsigned int, const double);
@@ -154,7 +162,8 @@ int main(int argc, char *argv[]){
             std::cerr << "Missing Parameters " << std::endl;
             std::cerr << "Usage: " << argv[0];
             std::cerr << " fixedImage sliceIndex";
-            std::cerr << " outputAtlasImage outputAtlasLabels";
+            std::cerr << " referenceImageOutputPath";
+            std::cerr << " annotationImageOutputPath";
             std::cerr << " registrationLogPath";
             return EXIT_FAILURE;
     }
@@ -162,17 +171,13 @@ int main(int argc, char *argv[]){
     // Declare Image, filter types ect
     typedef itk::ImageFileReader<ImageType> ReaderType;
     typedef itk::ImageFileWriter<EightBitImageType> WriterType;
-
     typedef itk::ResampleImageFilter<ImageType, ImageType> ResampleFilterType;
-
-    // The annotated images must be resampled with a nearest neighbor interpolator
-    typedef itk::NearestNeighborInterpolateImageFunction<ImageType, double> NearestNeighborInterpolatorType;
 
 
     // Get corresponding atlas reference slice
-    ImageType::Pointer atlasSlice = getCoronalAtlasSlice(atoi(argv[2]), atlasReferencePath);
-    ImageType::Pointer annotationSlice = getCoronalAtlasSlice(atoi(argv[2]), atlasLabelsPath);
-
+    int sliceIndex = atoi(argv[2]);
+    ImageType::Pointer atlasSlice = getCoronalAtlasSlice(sliceIndex, atlasReferencePath);
+    
     // Load the input image
     ReaderType::Pointer inputReader = ReaderType::New();
     inputReader->SetFileName(argv[1]);
@@ -185,7 +190,6 @@ int main(int argc, char *argv[]){
     spacing[1] = 25;
     inputImage->SetSpacing(spacing);
     atlasSlice->SetDirection(inputImage->GetDirection());
-    annotationSlice->SetDirection(inputImage->GetDirection());
 
     RigidTransformType::Pointer rigidTransform = getRigidRegistrationTransform(inputImage, atlasSlice);
     
@@ -203,7 +207,37 @@ int main(int argc, char *argv[]){
     // Compute the Bspline transform mapping the atlas slice to the input image
     BSplineTransformType::Pointer deformableTransform = computeBsplineTransform(rigidResampler->GetOutput(), inputImage, argv[5]); // (movingImage, fixedImage, logPath)
 
-    ResampleFilterType::Pointer deformableResampler = ResampleFilterType::New();
+    // Apply the computed transforms to the corresponding reference and annotation images, and save the results
+    // applyTransform(rigidTransform, deformableTransform, inputImage, outputName, atlasPath, sliceIndex)
+    applyTransformToReference(rigidTransform, deformableTransform, inputImage, argv[3], atlasReferencePath, sliceIndex);
+    applyTransformToAnnotations(rigidTransform, deformableTransform, inputImage, argv[4], atlasAnnotationsPath, sliceIndex);
+
+    return EXIT_SUCCESS;
+}
+
+
+void applyTransformToReference(RigidTransformType::Pointer rigidTransform, 
+        BSplineTransformType::Pointer deformableTransform, ImageType::Pointer inputImage, 
+        const char * outputName, const char * atlasReferencePath, int sliceIndex) {
+
+    typedef itk::ResampleImageFilter<ImageType, ImageType> ReferenceImageResamplerType;
+    typedef itk::ImageFileWriter<EightBitImageType> EightBitImageWriterType;
+
+    ImageType::Pointer referenceImage = getCoronalAtlasSlice(sliceIndex, atlasReferencePath);
+    referenceImage->SetDirection(inputImage->GetDirection());
+
+    // Apply the computed rigid transform to the atlas slice
+    ReferenceImageResamplerType::Pointer rigidResampler = ReferenceImageResamplerType::New();
+    rigidResampler->SetTransform(rigidTransform);
+    rigidResampler->SetInput(referenceImage);
+
+    rigidResampler->SetSize(inputImage->GetLargestPossibleRegion().GetSize());
+    rigidResampler->SetOutputOrigin(inputImage->GetOrigin());
+    rigidResampler->SetOutputSpacing(inputImage->GetSpacing());
+    rigidResampler->SetOutputDirection(inputImage->GetDirection());
+    rigidResampler->SetDefaultPixelValue(0);
+
+    ReferenceImageResamplerType::Pointer deformableResampler = ReferenceImageResamplerType::New();
     deformableResampler->SetTransform(deformableTransform);
     deformableResampler->SetInput(rigidResampler->GetOutput());
 
@@ -219,25 +253,55 @@ int main(int argc, char *argv[]){
     caster->SetInput(deformableResampler->GetOutput());
 
     // Write the registered reference image to the specified filepath
-    WriterType::Pointer outputWriter = WriterType::New();
-    outputWriter->SetFileName(argv[3]);
+    EightBitImageWriterType::Pointer outputWriter = EightBitImageWriterType::New();
+    outputWriter->SetFileName(outputName);
     outputWriter->SetInput(caster->GetOutput());
     outputWriter->Update();
+}
 
-    // Transform the annotated atlas slice and write the output to the specified filepath
-    // Create a nearest neighbor interpolator to use for the interpolation
+void applyTransformToAnnotations(RigidTransformType::Pointer rigidTransform, 
+        BSplineTransformType::Pointer deformableTransform, ImageType::Pointer inputImage, 
+        const char * outputName, const char * atlasAnnotationsPath, int sliceIndex) {
+
+    typedef itk::ResampleImageFilter<AnnotationImageType, AnnotationImageType> AnnotationImageResamplerType;
+    typedef itk::NearestNeighborInterpolateImageFunction<AnnotationImageType, double> NearestNeighborInterpolatorType;
+    typedef itk::ImageFileWriter<AnnotationImageType> AnnotationImageWriterType;
+
+    AnnotationImageType::Pointer annotationImage = getCoronalAnnotationAtlasSlice(sliceIndex, atlasAnnotationsPath);
+    annotationImage->SetDirection(inputImage->GetDirection());
+
+    // Apply the computed rigid transform to the atlas slice
+    AnnotationImageResamplerType::Pointer rigidResampler = AnnotationImageResamplerType::New();
+    rigidResampler->SetTransform(rigidTransform);
+    rigidResampler->SetInput(annotationImage);
+
+    rigidResampler->SetSize(inputImage->GetLargestPossibleRegion().GetSize());
+    rigidResampler->SetOutputOrigin(inputImage->GetOrigin());
+    rigidResampler->SetOutputSpacing(inputImage->GetSpacing());
+    rigidResampler->SetOutputDirection(inputImage->GetDirection());
+    rigidResampler->SetDefaultPixelValue(0);
+
+    AnnotationImageResamplerType::Pointer deformableResampler = AnnotationImageResamplerType::New();
+    deformableResampler->SetTransform(deformableTransform);
+    deformableResampler->SetInput(rigidResampler->GetOutput());
+
+    // Configure the resampler to apply the BSpline Transform
+    deformableResampler->SetSize(inputImage->GetLargestPossibleRegion().GetSize());
+    deformableResampler->SetOutputOrigin(inputImage->GetOrigin());
+    deformableResampler->SetOutputSpacing(inputImage->GetSpacing());
+    deformableResampler->SetOutputDirection(inputImage->GetDirection());
+    deformableResampler->SetDefaultPixelValue(0);
+
+    // Use nearest neighbor interpolation to resample the annotation images
     NearestNeighborInterpolatorType::Pointer nnInterpolator = NearestNeighborInterpolatorType::New();
-    // Use the nnInterpolator for each resampler in the pipeline
     rigidResampler->SetInterpolator(nnInterpolator);
     deformableResampler->SetInterpolator(nnInterpolator);
 
-    // The rigid resampler is the start of the pipeline
-    rigidResampler->SetInput(annotationSlice);
-    // Updating the output writer will pull the annotated slice through
-    outputWriter->SetFileName(argv[4]);
-    outputWriter->Update();    
-
-    return EXIT_SUCCESS;
+    // Write the registered reference image to the specified filepath
+    AnnotationImageWriterType::Pointer outputWriter = AnnotationImageWriterType::New();
+    outputWriter->SetFileName(outputName);
+    outputWriter->SetInput(deformableResampler->GetOutput());
+    outputWriter->Update();
 }
 
 
@@ -290,29 +354,55 @@ ImageType::Pointer getCoronalAtlasSlice(int sliceIndex, const char * atlasPath) 
     return atlasSlice;
 }
 
-
-ImageType::Pointer rotateImage(ImageType::Pointer inputImage) {
-    typedef itk::PermuteAxesImageFilter<ImageType> PermuteAxesFilterType;
-
-    // Create a permutation filter
-    PermuteAxesFilterType::Pointer permutationFilter = PermuteAxesFilterType::New();
-
-    // Define the axes permutation order
-    itk::FixedArray<unsigned int, 2> order;
-    order[0] = 1;
-    order[1] = 0;
+// Identical to getCoronalAtlasSlice(), except that a 32-bit uint image is loaded
+AnnotationImageType::Pointer getCoronalAnnotationAtlasSlice(int sliceIndex, const char * atlasPath) {
+    // Declare 3D and 2D image types
+    typedef itk::Image<AnnotationPixelType, 3> AtlasImageType;
+    typedef itk::Image<AnnotationPixelType, 2> SliceImageType;
     
-    // Permute the axes
-    permutationFilter->SetInput(inputImage);
-    permutationFilter->SetOrder(order);
-    permutationFilter->Update();
+    // Declare Readers and Writers for 3D images and 2D images respectively
+    typedef itk::ImageFileReader<AtlasImageType> AtlasReaderType;
+    typedef itk::ExtractImageFilter<AtlasImageType, SliceImageType> SliceAtlasFilterType;
 
-    // Return the permuted image
-    ImageType::Pointer outputImage = permutationFilter->GetOutput();
-    return outputImage;
+    // Collapsing along the x axis will yield coronal sections
+    const int axisToCollapse = 0;
+    
+    // Create a reader, to read the input image
+    AtlasReaderType::Pointer reader = AtlasReaderType::New();
+    reader->SetFileName(atlasPath);
+
+    // Update, to load the image so that size information can be ascertained
+    reader->Update();
+
+    // Get the whole atlas region
+    AtlasImageType::Pointer atlas = reader->GetOutput();
+    AtlasImageType::RegionType entireAtlasRegion = atlas->GetLargestPossibleRegion();
+
+    // Determine Slice Size
+    AtlasImageType::SizeType inputSize = entireAtlasRegion.GetSize();
+    AtlasImageType::SizeType sliceSize = inputSize;
+    sliceSize[axisToCollapse] = 0;  // 0 tells the ExtractionFilter to return an Image without that dimension
+
+    // Get Start Point
+    AtlasImageType::IndexType sliceStartIndex = entireAtlasRegion.GetIndex();
+    sliceStartIndex.Fill(0);
+    sliceStartIndex[axisToCollapse] = sliceIndex;  // Switched to slice index, I'll change this later
+    
+    // Initialize a slice region
+    AtlasImageType::RegionType sliceRegion(sliceStartIndex, sliceSize);
+
+    // Reference an extraction filter and connect it to the reader
+    SliceAtlasFilterType::Pointer extFilter = SliceAtlasFilterType::New();
+    extFilter->SetInput(atlas);
+    extFilter->SetDirectionCollapseToIdentity();
+
+    // Extract the slice
+    extFilter->SetExtractionRegion(sliceRegion);
+    extFilter->Update();
+    SliceImageType::Pointer atlasSlice = extFilter->GetOutput();
+    atlasSlice = rotateAnnotationImage(atlasSlice);
+    return atlasSlice;
 }
-
-
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inputImage, ImageType::Pointer atlasSlice) {
     typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
     typedef itk::MeanSquaresImageToImageMetric<ImageType, ImageType> MetricType;
@@ -513,6 +603,50 @@ BSplineTransformType::Pointer computeBsplineTransform(ImageType::Pointer movingI
     }
 
     return transform;
+}
+
+
+ImageType::Pointer rotateImage(ImageType::Pointer inputImage) {
+    typedef itk::PermuteAxesImageFilter<ImageType> PermuteAxesFilterType;
+
+    // Create a permutation filter
+    PermuteAxesFilterType::Pointer permutationFilter = PermuteAxesFilterType::New();
+
+    // Define the axes permutation order
+    itk::FixedArray<unsigned int, 2> order;
+    order[0] = 1;
+    order[1] = 0;
+    
+    // Permute the axes
+    permutationFilter->SetInput(inputImage);
+    permutationFilter->SetOrder(order);
+    permutationFilter->Update();
+
+    // Return the permuted image
+    ImageType::Pointer outputImage = permutationFilter->GetOutput();
+    return outputImage;
+}
+
+
+AnnotationImageType::Pointer rotateAnnotationImage(AnnotationImageType::Pointer inputImage) {
+    typedef itk::PermuteAxesImageFilter<AnnotationImageType> PermuteAxesFilterType;
+
+    // Create a permutation filter
+    PermuteAxesFilterType::Pointer permutationFilter = PermuteAxesFilterType::New();
+
+    // Define the axes permutation order
+    itk::FixedArray<unsigned int, 2> order;
+    order[0] = 1;
+    order[1] = 0;
+    
+    // Reorder the axes
+    permutationFilter->SetInput(inputImage);
+    permutationFilter->SetOrder(order);
+    permutationFilter->Update();
+
+    // Return the permuted image
+    AnnotationImageType::Pointer outputImage = permutationFilter->GetOutput();
+    return outputImage;
 }
 
 

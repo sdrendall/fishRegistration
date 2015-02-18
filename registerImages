@@ -75,7 +75,7 @@ def generateMetricLogPath(downsampledImagePath):
     return outputPath[:-12] + u'_registrationMetricLog.tsv' # remove '_downsampled'
 
 def loadJson(jsonPath):
-    jsonFile = open(jsonPath)
+    jsonFile = open(jsonPath, 'r')
     dictList = json.load(jsonFile)
     jsonFile.close()
     return dictList
