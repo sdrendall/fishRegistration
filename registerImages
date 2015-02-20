@@ -11,31 +11,36 @@ def generateParser():
     parser.add_argument('-b', '--useBatch', action='store_true')
     return parser
 
-def generateJsonPath(expPath):
-    return os.path.join(expPath, '.registrationData' ,'metadata.json')
-
-def generateArgList(imdata):
-    argStr = "registerSliceToAtlas '{downsampledImagePath}' '{atlasIndex}' \
-        '{registeredAtlasReferenceImagePath}' '{registeredAtlasLabelsPath}'".format(**imdata)
-    return argStr.split()
+def generateArgString(imdata):
+    return "registerSliceToAtlas '{downsampledImagePath}' '{atlasIndex}' \
+        '{registeredAtlasReferenceImagePath}' '{registeredAtlasLabelsPath}' '{registrationMetricLogPath}'".format(**imdata)
 
 def generateReferenceOutputPaths(imdata):
     imdata['registeredAtlasReferenceImagePath'] = generateReferenceImagePath(imdata['downsampledImagePath'])
     imdata['registeredAtlasLabelsPath'] = generateLabelsPath(imdata['downsampledImagePath']) 
     imdata['registrationMetricLogPath'] = generateMetricLogPath(imdata['downsampledImagePath'])
 
+def generateReferenceImagePath(downsampledImagePath):
+    return downsampledImagePath.rsplit('_', 1)[1] + u'_registeredAtlasReferenceImage.mhd' # remove '_downsampled'
+
+def generateLabelsPath(downsampledImagePath):
+    return downsampledImagePath.rsplit('_', 1)[1] + u'_registeredAtlasLabels.mhd' # remove '_downsampled'
+
+def generateMetricLogPath(downsampledImagePath):
+    return downsampledImagePath.rsplit('_', 1)[1] + u'_registrationMetricLog.tsv' # remove '_downsampled'
+
 def registerImage(imdata, expPath, submitJob=False):
     generateReferenceOutputPaths(imdata)
-    argList = generateArgList(imdata)
+    argStr = generateArgString(imdata)
     if submitJob:
-        openRegistrationProcess_bsub(imdata, argList, expPath)
+        openRegistrationProcess_bsub(imdata, argStr, expPath)
     else:
-        openRegistrationProcess_local(imdata, argList, expPath)
+        openRegistrationProcess_local(imdata, argStr, expPath)
 
-def openRegistrationProcess_local(imdata, argList, expPath):
+def openRegistrationProcess_local(imdata, argStr, expPath):
     try:
         print "Registering %s......" % imdata['downsampledImagePath']
-        sp.check_output(argList, shell=True, cwd=expPath, env=os.environ)
+        sp.call(argStr, shell=True, cwd=expPath, env=os.environ)
     except sp.CalledProcessError as e:
         print "Registration failed for %s!" % imdata['downsampledImagePath']
         print "registerSliceToAtlas returned with return code: %r" % e.returncode
@@ -44,25 +49,15 @@ def openRegistrationProcess_local(imdata, argList, expPath):
     else:
         imdata['registrationSuccessful'] = True
 
-def openRegistrationProcess_bsub(imdata, argList, expPath):
-    argList = 'bsub -q short -W 0:40 -R "rusage[mem=4000]" -n 4'.split() + argList
-    print ' '.join(argList)
+def openRegistrationProcess_bsub(imdata, argStr, expPath):
+    argStr = 'bsub -q short -W 0:40 -R "rusage[mem=4000]" -n 4'.split() + argStr
     try:
-        sp.check_call(argList, cwd=expPath, env=os.environ)
+        sp.call(argStr, shell=True, cwd=expPath, env=os.environ)
     except:
         print 'Job submission failed!'
         imdata['registrationSuccessful'] = False
     else:
         imdata['registrationSuccessful'] = True
-
-def generateReferenceImagePath(downsampledImagePath):
-    return outputPath.rsplit('_', 1)[1] + u'_registeredAtlasReferenceImage.mhd' # remove '_downsampled'
-    
-def generateLabelsPath(downsampledImagePath):
-    return outputPath.rsplit('_', 1)[1] + u'_registeredAtlasLabels.mhd' # remove '_downsampled'
-
-def generateMetricLogPath(downsampledImagePath):
-    return outputPath.rsplit('_', 1)[1] + u'_registrationMetricLog.tsv' # remove '_downsampled'
 
 def loadJson(jsonPath):
     jsonFile = open(jsonPath, 'r')
