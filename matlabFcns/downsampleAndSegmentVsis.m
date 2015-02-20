@@ -1,67 +1,55 @@
-function downsampleAndSegmentVsis(jsonPath, varargin)
-    %% downsampleAndSegmentVsis(jsonPath, options)
+function downsampleAndSegmentVsis(vsiPath, outputPath, varargin)
+    %% downsampleAndSegmentVsis(vsiPath, outputPath, [options])
     %
-
-    % TODO, help text!!!
+    % Loads the image at vsiPath, locates the brain section using active contour segmentation, 
+    %  and downsamples the image such that the pysical scale of each pixel in the resulting image
+    %  is the same as the pixel scale of images in the allen brain atlas.  This is intended as a 
+    %  preprocessing step to format input images for registration to the allen brain atlas.
+    %
+    % The downsampled image is saved at outputPath
+    %
+    % Additional options can be specified following positional arguments to obtain more desireable results:
+    %  'flip' - the image will be flipped vertically once it is downsampled
+    %  'flop' - the image will be flipped horizontally once it is downsampled
+    %  'registrationPlane' planeNo - planeNo is an integer specifying the plane of the vsi image to be downsampled and saved.
+    %    This should be the plane number of the image that is to be registered to the allen brain atlas.  Ideally, this image
+    %    should depict some sort of nuclear stain, such as dapi, hoechst, or nissl
+    %  'segmentationPlane' planeNo - The plane (channel) to be used to segment the brain section in the image from the background.
+    %    Ideally this plane contains an image with high tissue autofluorescence (green), and relatively sparse staining'
     
-    args = parseVarargin(nargin, varargin);
+    args = parseVarargin(nargin-2, varargin);
 
-    %% Load image data from the JSON file
-    imageData = loadjson(jsonPath);
+    %% Find the brain section in the segmentation image
+    segIm = loadPlaneFromVsi(vsiPath, args.segmentationPlane);
+    segIm = downsampleToAtlasScale(segIm);
+    segIm = mat2gray(segIm);
+    section = findBrainSection_AC(segIm);
 
-    for i = 1:length(imageData)
-        %% Load data
-        currentImData = imageData{i};
+    %% Load and Process the registration image
+    % Downsample, segment brain section, and flip, flop
+    regIm = loadPlaneFromVsi(vsiPath, args.registrationPlane);
+    regIm = downsampleToAtlasScale(regIm);
+    regIm(~section) = 0;
+    regIm = permuteImage(regIm, args);
 
-        %% Find the brain section in the segmentation image
-        segIm = loadPlaneFromVsi(currentImData.vsiPath, args.segmentationPlane);
-        segIm = downsampleToAtlasScale(segIm);
-        segIm = mat2gray(segIm);
-        section = findBrainSection_AC(segIm);
-
-        %% Load and Process the registration image
-        % Downsample, segment brain section, and flip, flop
-        regIm = loadPlaneFromVsi(currentImData.vsiPath, args.registrationPlane);
-        regIm = downsampleToAtlasScale(regIm);
-        regIm(~section) = 0;
-        if args.flip && args.flop
-            regIm = flipflop(regIm);
-        elseif args.flip
-            regIm = flip(regIm);
-        elseif args.flop
-            regIm = flop(regIm);
-        end
-
-        %% Pad the resulting image with zeros so it matches the size of the ABA
-        regIm = padToAtlasSize(regIm);
-
-        %% Save as 8-bit mhd
-        %regIm = convertToUint8(regIm);
-        %outputPath = generateoutputPath(jsonPath, s.vsiPath);
-        formatAndSaveMhd(regIm, outputPath);
-        imwrite(regIm, outputPath)
-
-        %% Update JSON file
-        disp('Updating JSON file.....')
-
-        % Paths stored in metadata.json should be relative to the experimentPath
-        relativePath = generateRelativePath(outputPath);
-        s.downsampledImagePath = relativePath;
-        imageData{i} = s;
-        savejson('', imageData, jsonPath);
-    end
-
+    %% Pad the resulting image with zeros so it matches the size of the ABA
+    regIm = padToAtlasSize(regIm);
+    
+    %% Convert to 8-bit then save 
+    regIm = convertToUint8(regIm);
+    saveImage(regIm, outputPath);
+    
 function args = parseVarargin(argc, argv)
     % Set defaults
     args = struct( ...
         'flip', false, ...
         'flop', false, ...
         'registrationPlane', 1, ...
-        'segmentationPlane', 2)
+        'segmentationPlane', 2);
 
     % Iterate though the input arguments until none are left
     i = 1;
-    while i <= argc - 1;
+    while i <= argc;
         switch lower(argv{i})
         case 'flip'
             args.flip = true;
@@ -70,11 +58,13 @@ function args = parseVarargin(argc, argv)
             args.flop = true;
             i = i + 1;
         case 'registrationplane'
-            args.registrationPlane = str2num(argv{i + 1});
+            args.registrationPlane = argv{i + 1};
             i = i + 2;
         case 'segmentationplane'
-            args.segmentationPlane = str2num(argv{i + 1});
+            args.segmentationPlane = argv{i + 1};
             i = i + 2;
+        otherwise
+            i = i + 1;
         end
     end
 
@@ -90,17 +80,18 @@ function im = downsampleToAtlasScale(im)
     atlasScale = vsiPixelSize/atlasPixelSize;
     im = imresize(im, atlasScale);
 
+function im = permuteImage(im, args)
+    if args.flip && args.flop
+        im = flipflop(im);
+    elseif args.flip
+        im = flip(im);
+    elseif args.flop
+        im = flip(im, 2);
+    end
+
 function im = flipflop(im)
     % flips the image vertically and horizontally
     im = im(end:-1:1, end:-1:1);
-
-function im = flip(im)
-    % flips the image vertically
-    im = im(end:-1:1, :);
-
-function im = flop(im)
-    % flips the image horizontally
-    im = im(:, end:-1:1);
 
 function im = padToAtlasSize(im)
     disp('Padding to atlas size.....')
@@ -126,20 +117,6 @@ function [m, s] = getBackgroundStats(im)
     m = median(m);
     s = sqrt(m)*2;  % Photon arrival is poisson, each photon is worth 2 in these images
 
-function im = convertZerosToNoise(im, m, s)
-    z = im(im == 0);
-    z = m + s .* randn(size(z));
-    im(im == 0) = z;
-
-function outputPath = generateoutputPath(jsonPath, vsiPath)
-    disp('Generating output path.....')
-    dataDir = fileparts(jsonPath);
-    [~, baseVsiName] = fileparts(vsiPath);
-    outputPath = fullfile(dataDir, [baseVsiName, '_downsampled.png']);
-
-function relPath = generateRelativePath(outputPath)
-    pathCoord = strfind(outputPath, '.registrationData');
-    relPath = outputPath(pathCoord:end);
 
 function im = convertToUint8(im)
     disp('Converting to uint8.....')
@@ -155,13 +132,24 @@ function showMinMax(im)
     disp(['min: ', num2str(min(im(:)))])
     disp(['max: ', num2str(max(im(:)))])
 
+function saveImage(im, outputPath)
+    % Calls the appropriate save function based on the file extension of the given output path
+    [~, ~, ext] = fileparts(outputPath);
+    if strcmpi(ext, '.mhd')
+        formatAndSaveMhd(im, outputPath)
+    else
+        imwrite(im, outputPath)
+    end
+
 function formatAndSaveMhd(data, outputPath)
-    disp('Generating Image Metadata.....')
+    % Generates an ImageType object from the given image data, then saves it to outputPath in the mhd format
+    disp('Generating image metadata.....')
     img = generateMhdImage(data);
     disp(['Saving Downsampled Image to ', outputPath])
     write_mhd(outputPath, img,'ElementType', 'uint8', 'NDims', 2);
 
 function img = generateMhdImage(data)
+    % Generates an ImageType object from the given image data
     s = size(data);
     origin = [0 0];
     spacing = [25 25];
@@ -169,3 +157,21 @@ function img = generateMhdImage(data)
 
     img = ImageType(s, origin, spacing, orientation);
     img.data = data;
+
+%% Unused Funtions %%
+% These are functions that were used in previous versions of this script
+
+function im = convertZerosToNoise(im, m, s)
+    z = im(im == 0);
+    z = m + s .* randn(size(z));
+    im(im == 0) = z;
+
+function outputPath = generateoutputPath(jsonPath, vsiPath)
+    disp('Generating output path.....')
+    dataDir = fileparts(jsonPath);
+    [~, baseVsiName] = fileparts(vsiPath);
+    outputPath = fullfile(dataDir, [baseVsiName, '_downsampled.png']);
+
+function relPath = generateRelativePath(outputPath)
+    pathCoord = strfind(outputPath, '.registrationData');
+    relPath = outputPath(pathCoord:end);

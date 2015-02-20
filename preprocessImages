@@ -1,15 +1,15 @@
 #! /usr/bin/python
 
-from sys import argv
 import subprocess as sp
-import os, json, glob, argparse
+import os, argparse
+from pythonMods import jsonTools
 
 def generateParser():
     parser = argparse.ArgumentParser(
         description='The first script to be called in the image registration pipeline. \n\
         This script should be run from the root directory of the directory heirarchy \
          containing all images to be registered.')
-    parser.add_argument('experimentPath', default=os.path.abspath('.'),
+    parser.add_argument('experimentPath', default=os.getcwd(), nargs='?',
         help='Specifies the root directory containing the data to be processed.  Defaults to the current directory.')
     parser.add_argument('-b', '--useBatch', default=False, action='store_true',
         help='Parallelizes computation by submitting jobs to an LSF queue, using the bsub command.')
@@ -26,30 +26,6 @@ def generateParser():
 
     return parser
 
-
-def createDataDirectory(expPath):
-    dataPath = os.path.join(expPath, '.registrationData')
-    ensureDir(dataPath)
-    return dataPath
-
-def ensureDir(dirPath):
-    if not os.path.exists(dirPath):
-        os.mkdir(dirPath)
-    elif not os.path.isdir(dirPath):
-        print "Warning! Non-directory file exists at:\n\t%s" % dirPath
-
-def createJsonFile(dataPath, imagePath):
-    jsonPath = os.path.join(dataPath, 'metadata.json')
-    jsonFile = open(jsonPath, 'w')
-    return jsonFile, jsonPath
-
-def populateJsonFile(j, vsiPaths):
-    dictList = list()
-    for vsiPath in vsiPaths:
-            imDict = {'vsiPath': vsiPath}
-            dictList.append(imDict)
-    json.dump(dictList, j, sort_keys=True, indent=4)
-
 def findVsis(expPath):
     vsiPaths = list()
     for root, dirs, files in os.walk(expPath):
@@ -60,42 +36,46 @@ def findVsis(expPath):
                 vsiPaths.append(relPath)
     return vsiPaths
 
-def preprocess_local():
+def generateDownsampledImagePath(vsiPath):
+    vsiName = os.path.split(vsiPath)[1]
+    rawName = os.path.splitext(vsiName)[0]
+    return os.path.join('.registrationData', rawName + '_downsampled.mhd')
 
-    argStr = 'matlab -nosplash -nodesktop -r "downsampleAndSegmentVsis(\'{}\'); exit"'.format(jsonPath)
-    print "argStr: " + argStr
-    sp.call(argStr, shell=True, cwd=experimentPath, env=os.environ)
-
-def generatePreprocessingArgs(jsonPath, inputArgs):
-    argStr = "matlab -nosplash -nodesktop -r \"downsampleAndSegmentVsis('%s', 'flip', {flip}, 'flop', {flop}, \
-        'registrationPlane', {registrationPlane}, 'segmentationPlane', {segmentationPlane})\"; exit" % jsonPath
-    argStr.format(**inputArgs)
+def generatePreprocessingArgs(imageData, inputArgs):
+    argStr = "matlab -nosplash -nodesktop -r \"downsampleAndSegmentVsis('%s', '%s', \
+        'Flip', {flip}, 'Flop', {flop}, 'registrationPlane', {registrationPlane}, 'segmentationPlane', {segmentationPlane}); \
+         exit\"".format(**vars(inputArgs)) % (os.path.abspath(imageData['vsiPath']), os.path.abspath(imageData['downsampledImagePath']))
 
     if inputArgs.useBatch:
-        argStr = 'bsub -q short -W 0:30 -R "rusage[mem=4000]" ' + argStr
-
-    return argStr
+        return 'bsub -q short -W 0:30 -R "rusage[mem=4000]" ' + argStr
+    else:
+        return argStr
 
 
 def main():
+    # Parse input arguments from command line
     parser = generateParser()
     args = parser.parse_args()
 
-    dataPath = createDataDirectory(args.experimentPath)
-    vsiPaths = findVsis(args.experimentPath)
-    jsonFile, jsonPath = createJsonFile(dataPath, vsiPaths)
-    populateJsonFile(jsonFile, vsiPaths)
-    jsonFile.close()
+    # For convenience, I'm going to set the cwd to the experiment path
+    os.chdir(args.experimentPath)
 
-    # Call the matlab preprocessing function
-    preprocessingArgs = generatePreprocessingArgs(jsonPath, args)
-    sp.call(preProcessingArgs, shell=True, cwd=args.experimentPath, env=os.environ)
+    # Find files to register, and create storage space for metadata
+    # Then, add the vsiPaths to the metadata
+    metadataHandler = jsonTools.MetadataHandler(args.experimentPath)
+    metadataHandler.ensure_metadata_directory()
+    vsiPaths = findVsis(args.experimentPath)
+    metadataHandler.metadata = [{'vsiPath': vsiPath} for vsiPath in vsiPaths]
+
+    for data in metadataHandler.metadata:
+        # Call the matlab preprocessing function
+        data['downsampledImagePath'] = generateDownsampledImagePath(data['vsiPath'])
+        preprocessingArgs = generatePreprocessingArgs(data, args)
+        sp.call(preprocessingArgs, shell=True, cwd=args.experimentPath, env=os.environ)
+        metadataHandler.update_metadata()
 
     if not args.useBatch:
         print "Preprocessing Complete!"
-        print "Experiment Root Path:", experimentPath
-        print "Data Path:", dataPath
-        print "JSON Path:", jsonPath
     else:
         print "Preprocessing jobs submitted."
         print "Please wait for all jobs to complete before continuing the registration pipeline"
