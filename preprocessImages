@@ -9,7 +9,7 @@ def generateParser():
         description='The first script to be called in the image registration pipeline. \n\
         This script should be run from the root directory of the directory heirarchy \
          containing all images to be registered.')
-    parser.add_argument('experimentPath', default=os.getcwd(), nargs='?',
+    parser.add_argument('-e', '--experimentPath', default=os.getcwd(),
         help='Specifies the root directory containing the data to be processed.  Defaults to the current directory.')
     parser.add_argument('-b', '--useBatch', default=False, action='store_true',
         help='Parallelizes computation by submitting jobs to an LSF queue, using the bsub command.')

@@ -1,30 +1,152 @@
-import os, json
-from sys import argv
+import os
+import jsonTools
+from itertools import imap
+
+
+class CoordinateImporter(jsonTools.MetadataHandler):
+    """
+    Subclass of the MetadataHandler that knows how to interpret the various forms that allen brain atlas coordinates may
+     be given as.
+
+    Slices marked as 'damaged' or without an input coordinate are marked to be excluded
+    """
+    def __init__(self, experiment_path=os.getcwd()):
+        jsonTools.MetadataHandler.__init__(self, experiment_path)
+        # Initialize mode
+        self.mode = 'index'
+        self.update_entry_with_coord = self.update_entry_with_atlas_index
+        # Load metadata
+        self.load_metadata()
+        # Exclude each entry by default
+        for entry in self.metadata:
+            entry['exclude'] = True
+
+    def import_csv_data(self, csv_lines):
+        # Map entries, and update Json File
+        formatted_data = self.format_csv_data(csv_lines)
+        self.add_input_to_metadata(formatted_data)
+
+    def format_csv_data(self, csv_lines):
+        """
+        :param csv_lines - an iterable that returns lines in csv format, where the first item is a tag associated with
+            a .vsi file in the experiment, and the rest of the items describe the rostral-caudal position of the slice
+            in the brain, or the word 'damaged'
+        :returns A list of InputData objects, each with the tag set to the tag found in the csv file, and appropriate
+            values for exclude and coord depending on the contents of the corresponding csv line
+        """
+        # Some iterator stuff because I was bored
+        iparsed_lines = imap(self.parse_csv_line, csv_lines)
+        exclude_item = lambda inp: inp.lower() == 'damaged' or inp.lower() == 'exclude'
+        return [InputData(tag=tag, exclude=any(imap(exclude_item, items)), coord=mean(self.iclean_input(items)))
+                for tag, items in iparsed_lines]
+
+    @staticmethod
+    def parse_csv_line(line):
+        line = remove_whitespace(line)
+        items = line.split(',')
+        tag = items.pop(0)
+        return tag, items
+
+    @staticmethod
+    def iclean_input(items):
+        for val in items:
+            if val.isdigit():
+                yield float(val)
+
+    def add_input_to_metadata(self, input_data):
+        # map tags to metadata
+        for item in input_data:
+            entry = self.find_corresponding_metadata_entry(item.tag)
+            if entry is not None and item.data['coord'] is not None:
+                entry['exclude'] = item.data['exclude']
+                self.update_entry_with_coord(entry, item.data['coord'])
+
+        # warn about dqs
+        self.warn_about_dqs()
+        # update metadata.json
+        self.update_metadata()
+
+    def find_corresponding_metadata_entry(self, tag):
+        for entry in self.metadata:
+            if tag in entry['vsiPath']:
+                return entry
+
+        # If an entry can't be found, print a warning and return none
+        print "WARNING: No json entry found for " + tag
+        return None
+
+    def warn_about_dqs(self):
+        for entry in self.metadata:
+            if entry['exclude']:
+                print "WARNING: " + entry['vsiPath'] + " will be excluded because it was not assigned an atlas coordinate"
+
+    def set_mode_bregma(self):
+        self.mode = 'bregma'
+        self.update_entry_with_coord = self.update_entry_with_bregma_coord
+
+    def set_mode_atlas(self):
+        self.mode = 'atlas'
+        self.update_entry_with_coord = self.update_entry_with_atlas_coord
+
+    def set_mode_index(self):
+        self.mode = 'index'
+        self.update_entry_with_coord = self.update_entry_with_atlas_index
+
+    @staticmethod
+    def update_entry_with_bregma_coord(entry, coord):
+        entry['bregmaCoord'] = float(coord)
+        entry['atlasCoord'] = bregma_to_atlas(entry['bregmaCoord'])
+        entry['atlasIndex'] = atlas_to_index(entry['atlasCoord'])
+
+    @staticmethod
+    def update_entry_with_atlas_coord(entry, coord):
+        entry['atlasCoord'] = float(coord)
+        entry['atlasIndex'] = atlas_to_index(entry['atlasCoord'])
+        entry['bregmaCoord'] = atlas_to_bregma(entry['atlasCoord'])
+
+    @staticmethod
+    def update_entry_with_atlas_index(entry, coord):
+        entry['atlasIndex'] = float(round(coord))
+        entry['atlasCoord'] = index_to_atlas(entry['atlasIndex'])
+        entry['bregmaCoord'] = atlas_to_bregma(entry['atlasCoord'])
+
+
+class InputData:
+    """
+    I hold data to add to one entry of the metadata.json file.
+    My tag identifies the metadata entry I should be added to.
+    """
+
+    # There's probably a better way to make these defaults but I can't figure it out.
+    #  The empty dict will never be accessed, so it doesn't matter that it is mutable
+    def __init__(self, tag, iterable={}, **kwargs):
+        self.tag = tag
+        self.data = dict(iterable, **kwargs)
 
 ## ----- CONVERSION FUNCTIONS ----- ##
-bregmaInAtlas = 5525 # in um
+bregmaInAtlas = 5525  # in um
 
 
-def atlas2Index(aCoord):
+def atlas_to_index(aCoord):
     ind = round(aCoord/25)
-    return verifyAbaIndex(ind)
+    return verify_aba_index(ind)
 
 
-def atlas2Bregma(aCoord):
+def atlas_to_bregma(aCoord):
     bCoord = bregmaInAtlas - aCoord
     return um2mm(bCoord)
 
 
-def bregma2Atlas(bCoord):
+def bregma_to_atlas(bCoord):
     bCoord = mm2um(bCoord)
     return bregmaInAtlas - bCoord
 
 
-def index2Atlas(aInd):
+def index_to_atlas(aInd):
     return aInd*25
 
 
-def verifyAbaIndex(ind):
+def verify_aba_index(ind):
     if ind < 0:
         print "WARNING: Given atlas coordinate corresponds to a negative index!"
         print "Defaulting to 0 (first slice)..."
@@ -36,11 +158,6 @@ def verifyAbaIndex(ind):
     return ind
 
 
-def getAvgCoord(self, c1, c2):
-    cAv = mean(c1, c2)
-    return round(cAv)
-
-
 def mm2um(mm):
     return mm*1000
 
@@ -49,182 +166,16 @@ def um2mm(um):
     return um/1000
 
 
-def mean(a, b):
-    a = float(a)
-    b = float(b)
-    return (a + b)/2
-
-
-class ArgumentParser:
-
-    def __init__(self, argv=argv):
-        self.argv = argv
-        self.checkArgs()
-        self.setExperimentPath()
-
-    def checkArgs(self):
-        if len(self.argv) > 3:
-            print "Too many input arguments!"
-            self.printProperUsage()
-            raise Exception('Inproper Input')
-        elif len(self.argv) == 3 and not os.path.isdir(os.path.abspath(self.argv[2])):
-            print "Specified experimentPath does not exist!"
-            self.printProperUsage()
-            raise Exception('Inproper Input')
-        elif len(self.argv) == 2 and not os.path.exists(os.path.abspath(self.argv[1])):
-            print "Specified csvPath does not exist!"
-            self.printProperUsage()
-            raise Exception('Inproper Input')
-        elif len(self.argv) == 1:
-            print "Not enough input arguments!"
-            self.printProperUsage()
-            raise Exception('Inproper Input')
-
-    def printProperUsage(self):
-        print "Proper Usage:"
-        print "%s csvPath [experimentPath]" % self.argv[0]
-
-    def getExperimentPath(self):
-        if len(self.argv) == 3:
-            expPath = os.path.abspath(self.argv[1])
-        else:
-            expPath = os.path.abspath('.')
-        return expPath
-
-    def setExperimentPath(self, expPath=None):
-        if expPath is None: expPath = self.getExperimentPath() # Won't let me use self.method() for default values
-        self.checkExperimentPath(expPath)
-        print 'Experiment Path: ' + expPath
-        self.expPath = expPath
-
-    def getCsvPath(self):
-        return os.path.abspath(self.argv[1])
-
-    def generateJsonPath(self, expPath=None):
-        if expPath is None: expPath = self.expPath
-        return os.path.join(expPath, '.registrationData', 'metadata.json')
-
-    def checkExperimentPath(self, expPath):
-        jsonPath = self.generateJsonPath(expPath)
-        if not os.path.isfile(jsonPath):
-            print "%s not found!" % jsonPath
-            raise Exception('Invalid Experiment Path:' + expPath)
-
-
-class CoordinateImporter:
-
-    def __init__(self, csvPath, jsonPath):
-        self.jsonPath = jsonPath
-        self.setMode_index()
-        self.csv = open(csvPath)
-        self.dictList = self.getDictList()
-
-    def importFromCsv(self, csvHeaderLines=0):
-        # Remove Header Lines from the input csv
-        self.popCsvHeaders(csvHeaderLines)
-
-        # By default, exclude entries
-        for entry in self.dictList: entry['exclude'] = 1
-
-        # Map entries, and update Json File
-        self.mapCsvToJson()
-        self.warnAboutDqs()
-        self.updateJson()
-    
-    def parseLine(self, line):
-        line = removeWhitespace(line)
-        items = line.split(',')
-        tag = items.pop(0)
-        return tag, items
-
-    def cleanInput(self, items):
-        return [float(val) for val in items if val.isdigit()]
-
-    def mapCsvToJson(self):
-        for line in self.csv:
-            # Construct vsi filename from tag
-            tag, inp = self.parseLine(line)
-            # Search json for corresponding vsi entry
-            entry = self.findCorrespondingJsonEntry(tag)
-            self.updateEntry(entry, inp, tag)
-
-    def findCorrespondingJsonEntry(self, tag):
-        for entry in self.dictList:
-            if tag in entry['vsiPath']:
-                return entry
-        # Return None if no entry matches
+def mean(iterable):
+    vals = map(float, iterable)
+    n = len(vals)
+    if n == 0:
         return None
-
-    def updateEntry(self, entry, inp, tag):
-        # Disqualify damaged sections
-        isDamaged = lambda inp: inp.lower() == 'damaged'
-        for item in inp: 
-            if isDamaged(item):
-                return
-
-        # The input must be cleaned AFTER it is searched for 'damaged'.
-        # Cleaning removes all non-numeric strings, and converts all remaining strings to floats
-        inp = self.cleanInput(inp)
-        # entry is None if no matching entry json entry is found
-        if entry is not None:
-            coord = mean(inp)
-            self.updateEntryWithCoord(entry, coord)
-            entry['exclude'] = 0
-        else:
-            # If an entry is not found in the json file, warn the user
-            print "WARNING: No json entry found for " + tag
-            
-    def warnAboutDqs(self):
-        for entry in self.dictList:
-            if entry['exclude'] == 1:
-                print "WARNING: " + entry['vsiPath'] + " will be excluded because it was not assigned an atlas coordinate"
-    
-    def popCsvHeaders(self, numLines):
-        for i in xrange(numLines): self.csv.readline()
-    
-    def getDictList(self):
-        jsonFile = open(self.jsonPath)
-        dictList = json.load(jsonFile)
-        jsonFile.close()
-        return dictList
-    
-    def updateJson(self):
-        jsonFile = open(self.jsonPath, 'w')
-        json.dump(self.dictList, jsonFile, sort_keys=True, indent=4)
-        jsonFile.close()
-
-    def setMode_bregma(self):
-        self.mode = 'bregma'
-        self.updateEntryWithCoord = self.updateEntryWithBregmaCoord
-
-    def setMode_atlas(self):
-        self.mode = 'atlas'
-        self.updateEntryWithCoord = self.updateEntryWithAtlasCoord
-
-    def setMode_index(self):
-        self.mode = 'index'
-        self.updateEntryWithCoord = self.updateEntryWithAtlasIndex
-
-    def updateEntryWithBregmaCoord(self, entry, coord):
-        entry['bregmaCoord'] = float(coord)
-        entry['atlasCoord'] = bregma2Atlas(entry['bregmaCoord'])
-        entry['atlasIndex'] = atlas2Index(entry['atlasCoord'])
-
-    def updateEntryWithAtlasCoord(self, entry, coord):
-        entry['atlasCoord'] = float(coord)
-        entry['atlasIndex'] = atlas2Index(entry['atlasCoord'])
-        entry['bregmaCoord'] = atlas2Bregma(entry['atlasCoord'])
-    
-    def updateEntryWithAtlasIndex(self, entry, coord):
-        entry['atlasIndex'] = float(round(coord))
-        entry['atlasCoord'] = index2Atlas(entry['atlasIndex'])
-        entry['bregmaCoord'] = atlas2Bregma(entry['atlasCoord'])
+    else:
+        return sum(vals)/n
 
 
 ### ---- MISC FUNCTIONS ---- ###
 
-def removeWhitespace(line):
+def remove_whitespace(line):
     return ''.join(line.split())
-
-def mean(l):
-    return sum(l)/float(len(l))

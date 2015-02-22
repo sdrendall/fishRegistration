@@ -4,30 +4,37 @@ import os, json, argparse
 from pythonMods import jsonTools
 import subprocess as sp
 
+
 def generateParser():
     parser = argparse.ArgumentParser(
         description="A script to register images to the Allen Brain Atlas using ITK.")
-    parser.add_argument('-e', '--experimentPath', default=os.path.abspath('.'))
+    parser.add_argument('-e', '--experimentPath', default=os.getcwd())
     parser.add_argument('-b', '--useBatch', action='store_true')
     return parser
+
 
 def generateArgString(imdata):
     return "registerSliceToAtlas '{downsampledImagePath}' '{atlasIndex}' \
         '{registeredAtlasReferenceImagePath}' '{registeredAtlasLabelsPath}' '{registrationMetricLogPath}'".format(**imdata)
+
 
 def generateReferenceOutputPaths(imdata):
     imdata['registeredAtlasReferenceImagePath'] = generateReferenceImagePath(imdata['downsampledImagePath'])
     imdata['registeredAtlasLabelsPath'] = generateLabelsPath(imdata['downsampledImagePath']) 
     imdata['registrationMetricLogPath'] = generateMetricLogPath(imdata['downsampledImagePath'])
 
+
 def generateReferenceImagePath(downsampledImagePath):
     return downsampledImagePath.rsplit('_', 1)[1] + u'_registeredAtlasReferenceImage.mhd' # remove '_downsampled'
+
 
 def generateLabelsPath(downsampledImagePath):
     return downsampledImagePath.rsplit('_', 1)[1] + u'_registeredAtlasLabels.mhd' # remove '_downsampled'
 
+
 def generateMetricLogPath(downsampledImagePath):
     return downsampledImagePath.rsplit('_', 1)[1] + u'_registrationMetricLog.tsv' # remove '_downsampled'
+
 
 def registerImage(imdata, expPath, submitJob=False):
     generateReferenceOutputPaths(imdata)
@@ -36,6 +43,7 @@ def registerImage(imdata, expPath, submitJob=False):
         openRegistrationProcess_bsub(imdata, argStr, expPath)
     else:
         openRegistrationProcess_local(imdata, argStr, expPath)
+
 
 def openRegistrationProcess_local(imdata, argStr, expPath):
     try:
@@ -49,6 +57,7 @@ def openRegistrationProcess_local(imdata, argStr, expPath):
     else:
         imdata['registrationSuccessful'] = True
 
+
 def openRegistrationProcess_bsub(imdata, argStr, expPath):
     argStr = 'bsub -q short -W 0:40 -R "rusage[mem=4000]" -n 4'.split() + argStr
     try:
@@ -59,11 +68,13 @@ def openRegistrationProcess_bsub(imdata, argStr, expPath):
     else:
         imdata['registrationSuccessful'] = True
 
+
 def loadJson(jsonPath):
     jsonFile = open(jsonPath, 'r')
     dictList = json.load(jsonFile)
     jsonFile.close()
     return dictList
+
 
 def updateJson(jsonPath, dictList):
     jsonFile = open(jsonPath, 'w')
