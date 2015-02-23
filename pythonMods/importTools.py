@@ -50,7 +50,7 @@ class CoordinateImporter(jsonTools.MetadataHandler):
     @staticmethod
     def iclean_input(items):
         for val in items:
-            if val.isdigit():
+            if is_number(val):
                 yield float(val)
 
     def add_input_to_metadata(self, input_data):
@@ -173,6 +173,14 @@ def mean(iterable):
         return None
     else:
         return sum(vals)/n
+
+
+def is_number(s):
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
 
 
 ### ---- MISC FUNCTIONS ---- ###
