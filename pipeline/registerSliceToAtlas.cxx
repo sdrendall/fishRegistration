@@ -32,8 +32,8 @@
 #include "itkCommand.h"
 
 // Globals (TODO: Do this differently)
-const char * atlasReferencePath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/atlasVolume/atlasVolume.mhd";
-const char * atlasAnnotationsPath = "/home/sam/Pictures/allenReferenceAtlas_mouseCoronal/annotation.mhd";
+const char * atlasReferencePath = "/home/sr235/atlasVolume/atlasVolume.mhd";
+const char * atlasAnnotationsPath = "/home/sr235/atlasVolume/annotation.mhd";
 const unsigned int BSplineOrder = 3;
 
 // Types
