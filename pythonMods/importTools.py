@@ -68,7 +68,7 @@ class CoordinateImporter(jsonTools.MetadataHandler):
 
     def find_corresponding_metadata_entry(self, tag):
         for entry in self.metadata:
-            if tag in entry['vsiPath']:
+            if tag.lower() in entry['vsiPath'].lower():
                 return entry
 
         # If an entry can't be found, print a warning and return none
