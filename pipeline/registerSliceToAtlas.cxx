@@ -193,9 +193,6 @@ int main(int argc, char *argv[]){
     inputImage->SetSpacing(spacing);
     atlasSlice->SetDirection(inputImage->GetDirection());
 
-    writeImage(inputImage, "/home/sam/Desktop/inputImage.tiff");
-    writeImage(atlasSlice, "/home/sam/Desktop/inputSlice.tiff");
-
     RigidTransformType::Pointer rigidTransform = getRigidRegistrationTransform(inputImage, atlasSlice);
     
     // Apply the computed rigid transform to the atlas slice
@@ -208,8 +205,6 @@ int main(int argc, char *argv[]){
     rigidResampler->SetOutputSpacing(inputImage->GetSpacing());
     rigidResampler->SetOutputDirection(inputImage->GetDirection());
     rigidResampler->SetDefaultPixelValue(0);
-
-    writeImage(rigidResampler->GetOutput(), "/home/sam/Desktop/rigidResult.tiff");
 
     // Compute the Bspline transform mapping the atlas slice to the input image
     BSplineTransformType::Pointer deformableTransform = computeBsplineTransform(rigidResampler->GetOutput(), inputImage, argv[5]); // (movingImage, fixedImage, logPath)
