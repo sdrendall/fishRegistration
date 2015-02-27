@@ -1,4 +1,12 @@
 function cropRegionsUsingAtlas(ids, varargin)
+	% cropRegionsUsingAtlas(ids, [options])
+	%
+	% 'slice order' - 1 x n array containing the permutation of the indicies 1:n 
+	%  		correpsonding to the order in which planes in the vsi files should be loaded
+	%       defaults to [3 2 1]
+	% 'split channels' - boolean, output channels individually, or as an rgb image
+	%					default false
+	% 'experiment path' - string
 
 	%% Parse input
 	args = parseVarargin(varargin, nargin);
@@ -15,25 +23,29 @@ function cropRegionsUsingAtlas(ids, varargin)
 
 	%% Crop Each Image
 	for i = 1:length(regData)
-		%% Load Image Data
 		currentSet = regData{i};
-		annotations = readImage(fullfile(args.exp_path, currentSet.registeredAtlasLabelsPath));
-	
-		%% Generate Region Mask
-		mask = getRegionsById(annotations, ids);
-		%% Only continue if there are actually pixels to crop
-		if any(mask(:))
-			planes = unpackvsi(fullfile(args.exp_path, currentSet.vsiPath), args);
+		try
+			%% Load Image Data
+			annotations = readImage(fullfile(args.exp_path, currentSet.registeredAtlasLabelsPath));
+		
+			%% Generate Region Mask
+			mask = getRegionsById(annotations, ids);
+			%% Only continue if there are actually pixels to crop
+			if any(mask(:))
+				planes = unpackvsi(fullfile(args.exp_path, currentSet.vsiPath), args);
+				
+				fullSizeMask = rescaleMask(mask, planes{1}); % Resize the mask to the size of a plane
+				regionProperties = regionprops(fullSizeMask, 'BoundingBox', 'Image');
 			
-			fullSizeMask = rescaleMask(mask, planes{1}); % Resize the mask to the size of a plane
-			regionProperties = regionprops(fullSizeMask, 'BoundingBox', 'Image');
-		
-			croppedRegions = cropRegionsFromPlanes(planes, regionProperties);
-		
-			outputBase = generateBaseOutputPath(currentSet.vsiPath);
-			saveCroppedRegions(croppedRegions, outputBase);
-		else
-			disp(['Region not found in ', currentSet.vsiPath, '.  Advancing to next image.'])
+				croppedRegions = cropRegionsFromPlanes(planes, regionProperties);
+			
+				outputBase = generateBaseOutputPath(currentSet.vsiPath);
+				saveCroppedRegions(croppedRegions, outputBase);
+			else
+				disp(['Region not found in ', currentSet.vsiPath, '.  Advancing to next image.'])
+			end
+		catch err
+			disp(['Warning!, cropping failed for ', currentSet.vsiPath]);
 		end
 	end
 

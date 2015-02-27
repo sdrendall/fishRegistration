@@ -1,7 +1,8 @@
 #! /usr/bin/python
 
 import subprocess as sp
-import os, argparse
+import os
+import argparse
 from pythonMods import jsonTools
 
 def generateParser():
@@ -23,6 +24,7 @@ def generateParser():
     parser.add_argument('-s', '--segmentationPlane', default=2, type=int,
         help='The plane (channel) to be used to segment the brain section in the image from the background.\
           Ideally this plane contains an image with high tissue autofluorescence (green), and relatively sparse staining')
+
 
     return parser
 

@@ -34,6 +34,8 @@
 // Globals (TODO: Do this differently)
 const char * atlasReferencePath = "/home/sr235/atlasVolume/atlasVolume.mhd";
 const char * atlasAnnotationsPath = "/home/sr235/atlasVolume/annotation.mhd";
+//const char * atlasReferencePath = "/home/sam/Dropbox/grayLab/allenReferenceAtlas_mouseCoronal/atlasVolume/atlasVolume.mhd";
+//const char * atlasAnnotationsPath = "/home/sam/Dropbox/grayLab/allenReferenceAtlas_mouseCoronal/atlasVolume/annotation.mhd";
 const unsigned int BSplineOrder = 3;
 
 // Types
@@ -191,6 +193,9 @@ int main(int argc, char *argv[]){
     inputImage->SetSpacing(spacing);
     atlasSlice->SetDirection(inputImage->GetDirection());
 
+    writeImage(inputImage, "/home/sam/Desktop/inputImage.tiff");
+    writeImage(atlasSlice, "/home/sam/Desktop/inputSlice.tiff");
+
     RigidTransformType::Pointer rigidTransform = getRigidRegistrationTransform(inputImage, atlasSlice);
     
     // Apply the computed rigid transform to the atlas slice
@@ -203,6 +208,8 @@ int main(int argc, char *argv[]){
     rigidResampler->SetOutputSpacing(inputImage->GetSpacing());
     rigidResampler->SetOutputDirection(inputImage->GetDirection());
     rigidResampler->SetDefaultPixelValue(0);
+
+    writeImage(rigidResampler->GetOutput(), "/home/sam/Desktop/rigidResult.tiff");
 
     // Compute the Bspline transform mapping the atlas slice to the input image
     BSplineTransformType::Pointer deformableTransform = computeBsplineTransform(rigidResampler->GetOutput(), inputImage, argv[5]); // (movingImage, fixedImage, logPath)
@@ -350,7 +357,7 @@ ImageType::Pointer getCoronalAtlasSlice(int sliceIndex, const char * atlasPath) 
     extFilter->SetExtractionRegion(sliceRegion);
     extFilter->Update();
     SliceImageType::Pointer atlasSlice = extFilter->GetOutput();
-    atlasSlice = rotateImage(atlasSlice);
+    //atlasSlice = rotateImage(atlasSlice);
     return atlasSlice;
 }
 
@@ -458,7 +465,7 @@ RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inp
     optimizer->SetScales(optimizerScales);
 
     // These parameters determine when the optimizer will terminate registration
-    optimizer->SetMaximumStepLength(0.125);
+    optimizer->SetMaximumStepLength(0.04);
     optimizer->SetMinimumStepLength(0.001);
     optimizer->SetNumberOfIterations(200);
 
@@ -541,7 +548,7 @@ BSplineTransformType::Pointer computeBsplineTransform(ImageType::Pointer movingI
     // Specify the optimizer parameters
     optimizer->SetMinimumStepLength(0.001);
     optimizer->SetRelaxationFactor(0.7);
-    optimizer->SetNumberOfIterations(500);
+    optimizer->SetNumberOfIterations(2000);
     optimizer->SetLearningRate(150);
 
     // Add an observer to the optimizer

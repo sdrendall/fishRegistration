@@ -271,7 +271,7 @@ function im = readImage(filepath)
     [~, ~, ext] = fileparts(filepath);
     if strcmpi(ext, '.mhd')
         imageObj = read_mhd(filepath);
-        im = imageObj.data';
+        im = imageObj.data;
     else
         im = imread(filepath);
     end
