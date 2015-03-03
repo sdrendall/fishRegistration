@@ -44,9 +44,11 @@ def generateDownsampledImagePath(vsiPath):
     return os.path.join('.registrationData', rawName + '_downsampled.mhd')
 
 def generatePreprocessingArgs(imageData, inputArgs):
-    argStr = "matlab -nosplash -nodesktop -r \"downsampleAndSegmentVsis('%s', '%s', \
-        'Flip', {flip}, 'Flop', {flop}, 'registrationPlane', {registrationPlane}, 'segmentationPlane', {segmentationPlane}); \
-         exit\"".format(**vars(inputArgs)) % (os.path.abspath(imageData['vsiPath']), os.path.abspath(imageData['downsampledImagePath']))
+    argStr = "matlab -nosplash -nodesktop -r \"downsampleAndSegmentVsis('%s', '%s', " \
+        "'Flip', {flip}, 'Flop', {flop}, 'registrationPlane', {registrationPlane}, 'segmentationPlane', {segmentationPlane});" \
+        " exit\""
+    argStr % (os.path.abspath(imageData['vsiPath']), os.path.abspath(imageData['downsampledImagePath']))
+    argStr.format(**vars(inputArgs))
 
     if inputArgs.useBatch:
         return 'bsub -q short -W 0:30 -R "rusage[mem=4000]" ' + argStr
