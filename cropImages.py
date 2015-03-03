@@ -44,8 +44,8 @@ def generate_arg_string(ids, args):
     arg_string = "matlab -nosplash -nodesktop -r \"cropRegionsUsingAtlas([%s], 'slice order', {sliceOrder}, " \
                  "'split_channels', {splitChannels}, 'experiment path', {experimentPath}, " \
                  "'output path', {outputPath}, ); exit\""
-    arg_string % ','.join(imap(str, ids))  # Cast the list of structure ids to strings then insert them into the arg str
-    arg_string.format(**vars(args))  # Unpack the args and insert them into the arg_string
+    arg_string = arg_string   # Cast the list of structure ids to strings, add to argstr
+    arg_string = arg_string.format(**vars(args))  # Unpack the args and insert them into the arg_string
 
     if args.useBatch:
         return 'bsub -q short -W 0:30 -R "rusage[mem=4000]" ' + arg_string
