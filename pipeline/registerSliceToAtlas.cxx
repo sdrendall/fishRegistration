@@ -402,7 +402,7 @@ AnnotationImageType::Pointer getCoronalAnnotationAtlasSlice(int sliceIndex, cons
     extFilter->SetExtractionRegion(sliceRegion);
     extFilter->Update();
     SliceImageType::Pointer atlasSlice = extFilter->GetOutput();
-    atlasSlice = rotateAnnotationImage(atlasSlice);
+    // atlasSlice = rotateAnnotationImage(atlasSlice);
     return atlasSlice;
 }
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inputImage, ImageType::Pointer atlasSlice) {
