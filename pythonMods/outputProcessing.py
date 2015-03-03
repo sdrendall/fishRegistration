@@ -88,8 +88,8 @@ class StructureNotFoundError(Exception):
     Raised when a structure cannot be found in the allen brain atlas
     """
 
-    def __init__(self, identifierType, identifier):
-        self.msg = 'Structure with %s %s could not be found.' % (identifierType, identifier)
+    def __init__(self, identifier_type, identifier):
+        self.msg = 'Structure with %s %s could not be found.' % (identifier_type, identifier)
 
 
 def main():
@@ -97,14 +97,14 @@ def main():
     finder = StructureFinder(structure_data_path)
 
     print "Finding ids by acronym....."
-    teaIds = finder.get_ids_by_acronym('TEa')
-    print teaIds
+    tea_ids = finder.get_ids_by_acronym('TEa')
+    print tea_ids
 
     print "Finding ids by name....."
-    isoIds = finder.get_ids_by_structure_name('Isocortex')
-    print isoIds
+    iso_ids = finder.get_ids_by_structure_name('Isocortex')
+    print iso_ids
 
-    if all((id in isoIds for id in teaIds)):
+    if all((id in iso_ids for id in tea_ids)):
         print 'success!'
     else:
         print 'failure :('

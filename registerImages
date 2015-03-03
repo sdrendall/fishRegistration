@@ -59,7 +59,7 @@ def openRegistrationProcess_local(imdata, argStr, expPath):
 
 
 def openRegistrationProcess_bsub(imdata, argStr, expPath):
-    argStr = 'bsub -q short -W 3:00 -R "rusage[mem=4000]" ' + argStr
+    argStr = 'bsub -q short -W 12:00 ' + argStr   # -n 4 -R "ptile[span=4]"
     try:
         sp.call(argStr, shell=True, cwd=expPath, env=os.environ)
     except:

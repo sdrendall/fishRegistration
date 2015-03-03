@@ -264,11 +264,16 @@ function im = getRegistrationImage(handles, imPath)
     % are in the same folder as the .json file the metadata is being read from.  This function attempts to load the 
     % image with the filename specified in imPath, located in the directory where the json file was read from.
     imName = getFilename(imPath);
-    im = readImage(fullfile(handles.basePath, imName));
+    try
+        im = readImage(fullfile(handles.basePath, imName));
+    catch err
+        warning(['Could not read image at ', fullfile(handles.basePath, imName), ' perhaps it doesnt exist.']);
+        im = 0;
+    end
 
 function im = readImage(filepath)
     % Uses the appropriate load function based on the filetype found at the filepath
-    filepath
+    disp(['loading ', filepath])
     [~, ~, ext] = fileparts(filepath);
     if strcmpi(ext, '.mhd')
         imageObj = read_mhd(filepath);
