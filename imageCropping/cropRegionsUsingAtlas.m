@@ -39,7 +39,7 @@ function cropRegionsUsingAtlas(ids, varargin)
 			
 				croppedRegions = cropRegionsFromPlanes(planes, regionProperties);
 			
-				outputBase = generateBaseOutputPath(currentSet.vsiPath);
+				outputBase = generateBaseOutputPath(currentSet.vsiPath, args);
 				saveCroppedRegions(croppedRegions, outputBase);
 			else
 				disp(['Region not found in ', currentSet.vsiPath, '.  Advancing to next image.'])
@@ -54,7 +54,9 @@ function args = parseVarargin(argv, argc)
 	args = struct( ...
 		'slice_order', [3, 2, 1], ...
 		'split_channels', false,  ...
-		'exp_path', '');
+		'exp_path', '', ...
+		'out_path', '', ...
+		'region_name', '');
 	if argc < 2
 		return
 	end
@@ -71,6 +73,12 @@ function args = parseVarargin(argv, argc)
 		case 'experiment path'
 			args.exp_path = argv{i + 1};
 			i = i + 2;
+		case 'output path'
+		    args.out_path = argv{i + 1};
+		    i = i + 2;
+		case 'region name'
+		    args.region_name = argv{i + 1};
+		    i = i + 2;
 		end
 	end
 
@@ -105,19 +113,29 @@ function jsonPath = generateJsonPath(experimentPath)
 	jsonPath = fullfile(experimentPath, '/.registrationData/', 'metadata.json');
 
 
-function saveCroppedRegions(croppedRegions, basePath)
+function saveCroppedRegions(croppedRegions, basePath, args)
 	disp('Saving Cropped Regions.....')
+	ensureSaveLocation(basePath);
 	for i = 1:length(croppedRegions)
-		savePath = [basePath, '_croppedTeA_', num2str(i), '.tiff'];
+		savePath = [basePath, '_cropped_', args.region_name, '_', num2str(i), '.tiff'];
 		disp(['Saving ', savePath])
 		imwrite(croppedRegions{i}, savePath)
 	end
 
 
-function basePath = generateBaseOutputPath(vsiPath)
+function ensureSaveLocation(savePath)
+    saveDir = fileparts(savePath);
+    [~, ~] = mkdir(saveDir)  % Nullifying the 2nd output prevents Warning messages from being printed if the dir exists
+
+
+function basePath = generateBaseOutputPath(vsiPath, args)
+    % Creates the base output path based on the vsiPath, and the specified output location.
+    % The directory structure, relative to the experiment path, is used to maintain some level of organization
+    % args.out_path is relative to args.exp_path.
+    % I'm not sure what will happen if args.exp_path is behind a symbolic link.
 	disp('Generating Output Paths.....')
 	[baseDir, baseName] = fileparts(vsiPath);
-	basePath = fullfile(baseDir, baseName);
+	basePath = fullfile(args.exp_path, args.out_path, baseDir, baseName);
 
 
 function croppedRegions = cropRegionsFromPlanes(planes, regions)

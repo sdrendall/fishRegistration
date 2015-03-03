@@ -268,6 +268,7 @@ function im = getRegistrationImage(handles, imPath)
 
 function im = readImage(filepath)
     % Uses the appropriate load function based on the filetype found at the filepath
+    filepath
     [~, ~, ext] = fileparts(filepath);
     if strcmpi(ext, '.mhd')
         imageObj = read_mhd(filepath);

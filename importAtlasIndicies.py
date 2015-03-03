@@ -7,11 +7,15 @@ import os
 
 def generate_parser():
     parser = argparse.ArgumentParser(
-        description='Imports allen index data from a specified location. Currently accepts .csv with rows beginning with a destinct identification tag specifying the .vsi file the index information corresponds to, and at least one column containing index information'
+        description='Imports allen index data from a specified location.  '
+                    'Currently accepts .csv with rows beginning with a distinct '
+                    'identification tag specifying the .vsi file the index information corresponds to, '
+                    'and at least one column containing index information'
     )
     parser.add_argument('csvPath', help='The csv file to import data from.')
     parser.add_argument('-e', '--experimentPath', default=os.getcwd(),
-                    help='The root directory containing the data to be processed.  Defaults to the current directory.')
+                        help='The root directory containing the data to be processed.'
+                             '  Defaults to the current directory.')
 
     import_modes = parser.add_mutually_exclusive_group(required=True)
     import_modes.add_argument('-i', '--useIndex', default=False, action='store_true',

@@ -61,12 +61,21 @@ class StructureFinder:
         return None
 
     def get_ids_from_structure(self, structure):
+        """
+        :param structure: A structure from the allen brain atlas structure data
+        :return: A list of ids corresponding to the given structure and all of its descendants
+        """
         return [id_no for id_no in self._generate_structure_ids(structure)]
 
     def _generate_structure_ids(self, structure):
+        """
+        A generator function that yields the id numbers of a given structure from the allen brain atlas,
+            and all of its descendants
+        :param structure: A structure from the allen brain atlas structure data
+        """
         yield structure['id']
-        child_id_generator = chain(imap(self._generate_structure_ids, structure['children']))
-        yield child_id_generator.next()
+        for id_no in chain(*imap(self._generate_structure_ids, structure['children'])):
+            yield id_no
 
     @staticmethod
     def _load_structure_data(path):
@@ -77,20 +86,28 @@ class StructureFinder:
 class StructureNotFoundError(Exception):
     """
     Raised when a structure cannot be found in the allen brain atlas
-
-    Displays an error message of the form:
-    'Structure with [identifierType] [identifier] could not be found.'
     """
 
     def __init__(self, identifierType, identifier):
         self.msg = 'Structure with %s %s could not be found.' % (identifierType, identifier)
 
+
 def main():
     structure_data_path = '/home/sam/Dropbox/grayLab/allenReferenceAtlas_mouseCoronal/structureData.json'
     finder = StructureFinder(structure_data_path)
+
     print "Finding ids by acronym....."
-    print finder.get_ids_by_acronym('TEa')
+    teaIds = finder.get_ids_by_acronym('TEa')
+    print teaIds
+
     print "Finding ids by name....."
-    print finder.get_ids_by_structure_name('Isocortex')
+    isoIds = finder.get_ids_by_structure_name('Isocortex')
+    print isoIds
+
+    if all((id in isoIds for id in teaIds)):
+        print 'success!'
+    else:
+        print 'failure :('
+
 if __name__ == '__main__':
     main()
