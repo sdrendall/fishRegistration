@@ -15,7 +15,7 @@ def generate_parser():
                         help='Specifies the root directory containing the data to be processed.  '
                              'Defaults to the current directory.')
     parser.add_argument('-o', '--outputPath', help='The location to save the output to.', default=None)
-    parser.add_argument('-r', '--regions', nargs='+',
+    parser.add_argument('-r', '--regions', nargs=1,
                         help="A list of names or acronyms denoting the regions to be cropped. "
                              "Hint: Region names containing spaces should be wrapped in apostrophes 'like' 'this'")
     parser.add_argument('-s', '--splitChannels', action='store_const', const=1, default=0,
@@ -43,7 +43,7 @@ def create_arg_list(metadataObject, ids, args):
     arg_string = "matlab -nosplash -nodesktop -r " \
                  "\"cropRegionsUsingAtlas('%s', '%s', [%s], 'slice order', {sliceOrder}, " \
                  "'split channels', {splitChannels}, 'experiment path', '{experimentPath}', " \
-                 "'output path', '{outputPath}'); exit\""
+                 "'output path', '{outputPath}', 'region name', '{regions[0]}'); exit\""
     arg_string = arg_string.format(**vars(args))  # Unpack the args and insert them into the arg_string
     arg_string = arg_string % (metadataObject['vsiPath'], metadataObject['registeredAtlasLabelsPath'],
                                ','.join(imap(str, ids)))
@@ -98,7 +98,7 @@ def main():
             try:
                 arg_string = create_arg_list(data, id_list, args)
             except KeyError:
-                print 'Registration was unsuccessful for ' + data.vsiPath + ' so it wont be cropped'
+                print 'Registration was unsuccessful for ' + data['vsiPath'] + ' so it wont be cropped'
             finally:
                 open_crop_process(arg_string, args)
 
