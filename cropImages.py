@@ -24,7 +24,7 @@ def generate_parser():
                         help='If channels are not split, this specifies the order that channels in the vsi Image '
                              'should be saved to the output rgb image.')
     parser.add_argument('-d', '--structureDataPath',
-                        default=os.path.abspath('~/code/fishRegistration/structureData.json'),
+                        default=os.path.expanduser('~/code/fishRegistration/structureData.json'),
                         help='The path to the .json file containing the allen brain atlas structure data. '
                              'Defaults to ~/code/fishRegistration/structureData.json')
     parser.add_argument('-b', '--useBatch', action='store_true', default=False,
@@ -95,12 +95,15 @@ def main():
     # TODO: Sort out this mess...
     for id_list in id_list_gen:
         for data in handler.metadata:
-            try:
-                arg_string = create_arg_list(data, id_list, args)
-            except KeyError:
-                print 'Registration was unsuccessful for ' + data['vsiPath'] + ' so it wont be cropped'
-            finally:
-                open_crop_process(arg_string, args)
+            if not data['sliceUsable'] == 'no':
+                try:
+                    arg_string = create_arg_list(data, id_list, args)
+                except KeyError:
+                    print 'Registration was unsuccessful for ' + data['vsiPath'] + ' so it wont be cropped'
+                finally:
+                    open_crop_process(arg_string, args)
+            else:
+                print data['vsiPath'] + " was labelled as unusable so it won't be cropped."
 
 
 if __name__ == '__main__':
