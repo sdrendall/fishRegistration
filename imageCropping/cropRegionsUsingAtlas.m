@@ -1,5 +1,5 @@
-function cropRegionsUsingAtlas(jsonString, ids, varargin)
-	% cropRegionsUsingAtlas(jsonObject, ids, [options])
+function cropRegionsUsingAtlas(vsiPath, labelsPath, ids, varargin)
+	% cropRegionsUsingAtlas(vsiPath, labelsPath, ids, [options])
 	%
 	% 'slice order' - 1 x n array containing the permutation of the indicies 1:n 
 	%  		correpsonding to the order in which planes in the vsi files should be loaded
@@ -10,32 +10,31 @@ function cropRegionsUsingAtlas(jsonString, ids, varargin)
 
 
 	%% Parse input
-	args = parseVarargin(varargin, nargin - 2);
-	metadataStruct = json.load(jsonString);
+	args = parseVarargin(varargin, nargin - 3);
 
 	%% Crop Each Image
 	try
 		%% Load Image Data
-		annotations = readImage(fullfile(args.exp_path, metadataStruct.registeredAtlasLabelsPath));
+		annotations = readImage(fullfile(args.exp_path, labelsPath));
 
 		%% Generate Region Mask
 		mask = getRegionsById(annotations, ids);
 		%% Only continue if there are actually pixels to crop
 		if any(mask(:))
-			planes = unpackvsi(fullfile(args.exp_path, metadataStruct.vsiPath), args);
+			planes = unpackvsi(fullfile(args.exp_path, vsiPath), args);
 
 			fullSizeMask = rescaleMask(mask, planes{1}); % Resize the mask to the size of a plane
 			regionProperties = regionprops(fullSizeMask, 'BoundingBox', 'Image');
 
 			croppedRegions = cropRegionsFromPlanes(planes, regionProperties);
 
-			outputBase = generateBaseOutputPath(metadataStruct.vsiPath, args);
+			outputBase = generateBaseOutputPath(vsiPath, args);
 			saveCroppedRegions(croppedRegions, outputBase, args);
 		else
-			disp(['Region not found in ', metadataStruct.vsiPath, '.  Advancing to next image.'])
+			disp(['Region not found in ', vsiPath, '.  Advancing to next image.'])
 		end
 	catch err
-		disp(['Warning!, cropping failed for ', metadataStruct.vsiPath]);
+		disp(['Warning!, cropping failed for ', vsiPath]);
 		rethrow(err)
 	end
 

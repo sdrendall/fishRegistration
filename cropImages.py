@@ -4,7 +4,6 @@ __author__ = 'Sam Rendall'
 import argparse
 import os
 import subprocess
-import json
 from itertools import imap
 from pythonMods import outputProcessing, jsonTools
 
@@ -41,22 +40,22 @@ def generate_parser():
 
 
 def create_arg_list(metadataObject, ids, args):
-    arg_list = ["matlab", "-nosplash", "-nodesktop", "-r"]
-    matlab_args = "cropRegionsUsingAtlas('%s', [%s], 'slice order', {sliceOrder}, " \
-                  "'split channels', {splitChannels}, 'experiment path', '{experimentPath}', " \
-                  "'output path', '{outputPath}'); exit"
-    matlab_args = matlab_args.format(**vars(args))  # Unpack the args and insert them into the matlab_args
-    matlab_args = matlab_args % (json.dumps(metadataObject), ','.join(imap(str, ids)))
-    arg_list += [matlab_args]
+    arg_string = "matlab -nosplash -nodesktop -r " \
+                 "\"cropRegionsUsingAtlas('%s', '%s', [%s], 'slice order', {sliceOrder}, " \
+                 "'split channels', {splitChannels}, 'experiment path', '{experimentPath}', " \
+                 "'output path', '{outputPath}'); exit\""
+    arg_string = arg_string.format(**vars(args))  # Unpack the args and insert them into the arg_string
+    arg_string = arg_string % (metadataObject['vsiPath'], metadataObject['registeredAtlasLabelsPath'],
+                               ','.join(imap(str, ids)))
 
     if args.useBatch:
-        return 'bsub -q short -W 0:30 '.split() + arg_list
+        return 'bsub -q short -W 0:30 ' + arg_string
     else:
-        return arg_list
+        return arg_string
 
 
-def open_crop_process(arg_list, args):
-    subprocess.call(arg_list, cwd=args.experimentPath, env=os.environ)
+def open_crop_process(arg_string, args):
+    subprocess.call(arg_string, cwd=args.experimentPath, env=os.environ, shell=True)
 
 
 def format_output_path(args):
@@ -92,11 +91,16 @@ def main():
     handler = jsonTools.MetadataHandler(args.experimentPath)
     handler.load_metadata()
 
+    # TODO: REGION NAMES
     # TODO: Sort out this mess...
     for id_list in id_list_gen:
         for data in handler.metadata:
-            arg_string = create_arg_list(data, id_list, args)
-            open_crop_process(arg_string, args)
+            try:
+                arg_string = create_arg_list(data, id_list, args)
+            except KeyError:
+                print 'Registration was unsuccessful for ' + data.vsiPath + ' so it wont be cropped'
+            finally:
+                open_crop_process(arg_string, args)
 
 
 if __name__ == '__main__':
