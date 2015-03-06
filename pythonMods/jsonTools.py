@@ -1,6 +1,7 @@
 import json
 import os
 
+
 class MetadataHandler():
     """
     A class to handle the metadata.json file used in the image registration pipeling
@@ -10,9 +11,9 @@ class MetadataHandler():
 
     metadata = None
 
-    def __init__(self, experimentPath=os.getcwd()):
-        self.experimentPath = experimentPath
-        self.metadataPath = self.generate_metadata_path(experimentPath)
+    def __init__(self, experiment_path=os.getcwd()):
+        self.experimentPath = experiment_path
+        self.metadataPath = self.generate_metadata_path(experiment_path)
 
     def load_metadata(self):
         """
@@ -38,22 +39,22 @@ class MetadataHandler():
         Creates self.experimentPath/.registrationData if it doesn't exist
         :return: nope
         """
-        dirPath = os.path.join(self.experimentPath, '.registrationData')
-        _ensure_dir(dirPath)
+        dir_path = os.path.join(self.experimentPath, '.registrationData')
+        _ensure_dir(dir_path)
 
     @staticmethod
-    def generate_metadata_path(experimentPath):
+    def generate_metadata_path(experiment_path):
         """
         Generates the path the the metadata.json file
-        :param experimentPath: root path for the experiment data.  Must contain the .registrationData directory
+        :param experiment_path: root path for the experiment data.  Must contain the .registrationData directory
         :return: a string containing the path to the .metadata.json file: 'experimentPath/.registrationData.metadata.json'
         """
-        return os.path.join(experimentPath, '.registrationData', 'metadata.json')
+        return os.path.join(experiment_path, '.registrationData', 'metadata.json')
 
 
-def _ensure_dir(dirPath):
-    if not os.path.exists(dirPath):
-        os.mkdir(dirPath)
-    elif not os.path.isdir(dirPath):
-        print "Warning! Non-directory file exists at:\n\t%s" % dirPath
+def _ensure_dir(dir_path):
+    if not os.path.exists(dir_path):
+        os.mkdir(dir_path)
+    elif not os.path.isdir(dir_path):
+        print "Warning! Non-directory file exists at:\n\t%s" % dir_path
 

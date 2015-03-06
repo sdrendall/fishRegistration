@@ -1,5 +1,5 @@
-function cropRegionsUsingAtlas(ids, varargin)
-	% cropRegionsUsingAtlas(ids, [options])
+function cropRegionsUsingAtlas(jsonString, ids, varargin)
+	% cropRegionsUsingAtlas(jsonObject, ids, [options])
 	%
 	% 'slice order' - 1 x n array containing the permutation of the indicies 1:n 
 	%  		correpsonding to the order in which planes in the vsi files should be loaded
@@ -8,45 +8,35 @@ function cropRegionsUsingAtlas(ids, varargin)
 	%					default false
 	% 'experiment path' - string
 
-	%% Parse input
-	args = parseVarargin(varargin, nargin);
 
-	%% Load metadata
-	if isempty(args.exp_path)
-		disp('Experiment Path Not Specified. Please Choose Experiment Path')
-		args.exp_path = uigetdir;
-	end
-	
-	cd(args.exp_path)
-	jsonPath = generateJsonPath(args.exp_path);
-	regData = loadRegistrationData(jsonPath);
+	%% Parse input
+	args = parseVarargin(varargin, nargin - 2);
+	metadataStruct = json.load(jsonString);
 
 	%% Crop Each Image
-	for i = 1:length(regData)
-		currentSet = regData{i};
-		try
-			%% Load Image Data
-			annotations = readImage(fullfile(args.exp_path, currentSet.registeredAtlasLabelsPath));
-		
-			%% Generate Region Mask
-			mask = getRegionsById(annotations, ids);
-			%% Only continue if there are actually pixels to crop
-			if any(mask(:))
-				planes = unpackvsi(fullfile(args.exp_path, currentSet.vsiPath), args);
-				
-				fullSizeMask = rescaleMask(mask, planes{1}); % Resize the mask to the size of a plane
-				regionProperties = regionprops(fullSizeMask, 'BoundingBox', 'Image');
-			
-				croppedRegions = cropRegionsFromPlanes(planes, regionProperties);
-			
-				outputBase = generateBaseOutputPath(currentSet.vsiPath, args);
-				saveCroppedRegions(croppedRegions, outputBase);
-			else
-				disp(['Region not found in ', currentSet.vsiPath, '.  Advancing to next image.'])
-			end
-		catch err
-			disp(['Warning!, cropping failed for ', currentSet.vsiPath]);
+	try
+		%% Load Image Data
+		annotations = readImage(fullfile(args.exp_path, metadataStruct.registeredAtlasLabelsPath));
+
+		%% Generate Region Mask
+		mask = getRegionsById(annotations, ids);
+		%% Only continue if there are actually pixels to crop
+		if any(mask(:))
+			planes = unpackvsi(fullfile(args.exp_path, metadataStruct.vsiPath), args);
+
+			fullSizeMask = rescaleMask(mask, planes{1}); % Resize the mask to the size of a plane
+			regionProperties = regionprops(fullSizeMask, 'BoundingBox', 'Image');
+
+			croppedRegions = cropRegionsFromPlanes(planes, regionProperties);
+
+			outputBase = generateBaseOutputPath(metadataStruct.vsiPath, args);
+			saveCroppedRegions(croppedRegions, outputBase, args);
+		else
+			disp(['Region not found in ', metadataStruct.vsiPath, '.  Advancing to next image.'])
 		end
+	catch err
+		disp(['Warning!, cropping failed for ', metadataStruct.vsiPath]);
+		rethrow(err)
 	end
 
 
@@ -57,19 +47,16 @@ function args = parseVarargin(argv, argc)
 		'exp_path', '', ...
 		'out_path', '', ...
 		'region_name', '');
-	if argc < 2
-		return
-	end
 
 	i = 1;
-	while i <= argc - 1
+	while i <= argc
 		switch lower(argv{i})
 		case 'slice order'
 			args.slice_order = argv{i + 1};
 			i = i + 2;
 		case 'split channels'
-			args.split_channels = true;
-			i = i + 1;
+			args.split_channels = argv{i + 1};
+			i = i + 2;
 		case 'experiment path'
 			args.exp_path = argv{i + 1};
 			i = i + 2;
@@ -79,6 +66,10 @@ function args = parseVarargin(argv, argc)
 		case 'region name'
 		    args.region_name = argv{i + 1};
 		    i = i + 2;
+		otherwise
+		    disp('Argument unrecognized')
+		    disp(argv{i})
+		    i = i + 1;
 		end
 	end
 
@@ -105,7 +96,7 @@ function mask = rescaleMask(mask, section)
 	% The size of the structuring element used in the opening operation is determined using the
 	% Ratio between the number of pixels in the first dimension of the image
 	pixelRatio = nr/(endPoint(1) - startPoint(1));
-	mask = imopen(mask, strel('disk', round(pixelRatio)));
+	mask = imopen(mask, strel('disk', 2*round(pixelRatio)));
 
 
 function jsonPath = generateJsonPath(experimentPath)
@@ -186,7 +177,7 @@ function im = readImage(filepath)
     [~, ~, ext] = fileparts(filepath);
     if strcmpi(ext, '.mhd')
         imageObj = read_mhd(filepath);
-        im = imageObj.data';
+        im = imageObj.data;
     else
         im = imread(filepath);
     end
@@ -197,11 +188,13 @@ function planes = unpackvsi(filepath, args)
 	r = bfGetReader(filepath);
 	np = r.getImageCount();
 	if args.split_channels
+	    disp('Loading Channels seperately')
 		planes = cell([np, 1]);
 		for i = 1:np
 			planes{i} = mat2gray(bfGetPlane(r, i));
 		end
 	else
+	    disp('Loading as RGB image')
 		planes = {loadRgbVsi(r, args)};
 	end
 

@@ -4,8 +4,9 @@ __author__ = 'Sam Rendall'
 import argparse
 import os
 import subprocess
+import json
 from itertools import imap
-from pythonMods import outputProcessing
+from pythonMods import outputProcessing, jsonTools
 
 
 def generate_parser():
@@ -23,7 +24,7 @@ def generate_parser():
     parser.add_argument('-i', '--sliceOrder', nargs=3, default=[1, 2, 3], type=int,
                         help='If channels are not split, this specifies the order that channels in the vsi Image '
                              'should be saved to the output rgb image.')
-    parser.add_argument('-i', '--structureDataPath',
+    parser.add_argument('-d', '--structureDataPath',
                         default=os.path.abspath('~/code/fishRegistration/structureData.json'),
                         help='The path to the .json file containing the allen brain atlas structure data. '
                              'Defaults to ~/code/fishRegistration/structureData.json')
@@ -31,8 +32,7 @@ def generate_parser():
                         help='Submit processes to an lsf cluster. Warning: Mistakes will take longer to catch, '
                              'prototype locally before using this option.')
 
-    group = parser.add_mutually_exclusive_group(required=True,
-                                                description='The type of identifier used to specify brain structures.')
+    group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-a', '--useAcronyms', action='store_true', default=False,
                        help='Identify brain regions using acronyms')
     group.add_argument('-n', '--useNames', action='store_true', default=False,
@@ -40,21 +40,23 @@ def generate_parser():
     return parser
 
 
-def generate_arg_string(ids, args):
-    arg_string = "matlab -nosplash -nodesktop -r \"cropRegionsUsingAtlas([%s], 'slice order', {sliceOrder}, " \
-                 "'split_channels', {splitChannels}, 'experiment path', {experimentPath}, " \
-                 "'output path', {outputPath}, ); exit\""
-    arg_string = arg_string   # Cast the list of structure ids to strings, add to argstr
-    arg_string = arg_string.format(**vars(args))  # Unpack the args and insert them into the arg_string
+def create_arg_list(metadataObject, ids, args):
+    arg_list = ["matlab", "-nosplash", "-nodesktop", "-r"]
+    matlab_args = "cropRegionsUsingAtlas('%s', [%s], 'slice order', {sliceOrder}, " \
+                  "'split channels', {splitChannels}, 'experiment path', '{experimentPath}', " \
+                  "'output path', '{outputPath}'); exit"
+    matlab_args = matlab_args.format(**vars(args))  # Unpack the args and insert them into the matlab_args
+    matlab_args = matlab_args % (json.dumps(metadataObject), ','.join(imap(str, ids)))
+    arg_list += [matlab_args]
 
     if args.useBatch:
-        return 'bsub -q short -W 0:30 -R "rusage[mem=4000]" ' + arg_string
+        return 'bsub -q short -W 0:30 '.split() + arg_list
     else:
-        return arg_string
+        return arg_list
 
 
-def open_crop_process(arg_string, args):
-    subprocess.call(arg_string, cwd=args.experimentPath, env=os.environ, shell=True)
+def open_crop_process(arg_list, args):
+    subprocess.call(arg_list, cwd=args.experimentPath, env=os.environ)
 
 
 def format_output_path(args):
@@ -87,6 +89,15 @@ def main():
         print 'Input format must be specified'
         raise Exception()
 
+    handler = jsonTools.MetadataHandler(args.experimentPath)
+    handler.load_metadata()
+
+    # TODO: Sort out this mess...
     for id_list in id_list_gen:
-        arg_string = generate_arg_string(id_list, args)
-        open_crop_process(arg_string, args)
+        for data in handler.metadata:
+            arg_string = create_arg_list(data, id_list, args)
+            open_crop_process(arg_string, args)
+
+
+if __name__ == '__main__':
+    main()
