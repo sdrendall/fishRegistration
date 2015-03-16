@@ -153,8 +153,14 @@ class BatchProcess(Process):
 
     def __init__(self, *args):
         bsub_path = self.get_bsub_path()
-        args = ['-I', '-o', '-', '-q', 'interactive'] + args
-        Process.__init__(self, bsub_path, *args)
+        submission_args = ('bsub', '-I', '-q', 'interactive')
+        self.job_args = list(args)  # TODO tuple?
+        Process.__init__(self, bsub_path, *submission_args)
+
+    def launch(self):
+        d = Process.launch(self)
+        self.transport.write(self.job_args.join())
+        return d
 
     @staticmethod
     def get_bsub_path():
@@ -166,8 +172,6 @@ class BatchProcess(Process):
         finally:
             return bsub_path
 
-
-
 def process_generator():
     exe = '/bin/echo'
     num = 0
@@ -176,18 +180,38 @@ def process_generator():
         args = ['echo', 'This is process number {}!'.format(num)]
         yield Process(exe, *args)
 
-def main():
-    scheduler = Scheduler(max_threads=5)
 
-    #print 'Running single processes....'
-    #for process in process_generator():
-    #    scheduler.add_process(process)
-    #scheduler.run_processes()
+def test_chains():
+    scheduler = Scheduler(max_threads=5)
 
     print 'Running Chain Processes....'
     for chain in (ProcessChain((process for process in process_generator())) for n in xrange(0, 10)):
         scheduler.add_process(chain)
     scheduler.run_processes()
+
+
+def test_processes():
+    scheduler = Scheduler(max_threads=5)
+
+    print 'Running single processes....'
+    for process in process_generator():
+        scheduler.add_process(process)
+    scheduler.run_processes()
+
+
+def test_bsub():
+    scheduler = Scheduler()
+
+    print 'Submitting Bjobs.....'
+    args = ['echo', 'bsub_test', '>', '~/testfile.txt']
+    process = BatchProcess(*args)
+
+    scheduler.add_process(process)
+    scheduler.run_processes()
+
+
+def main():
+    test_bsub()
 
 if __name__ == '__main__':
     main()
