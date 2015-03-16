@@ -1,5 +1,8 @@
 from twisted.internet import defer, protocol
 import os
+import subprocess
+import pipes
+import tempfile
 
 
 class Scheduler(object):
@@ -77,6 +80,8 @@ class Task(object):
 def echo(stuff):
     print stuff
 
+import pipes
+pipes.Template.open().write()
 
 class Process(Task, protocol.ProcessProtocol):
 
@@ -128,7 +133,7 @@ class ProcessChain(Task):
         return process.defer_until_process_completion()
 
     def get_subprocess_complete_deferreds(self):
-        return[process.defer_until_process_completion() for process in self.processes]
+        return [process.defer_until_process_completion() for process in self.processes]
 
     def _launch_next_process(self):
         if self.processes:
@@ -141,6 +146,27 @@ class ProcessChain(Task):
 
     def _launch_next_process_callback(self, results):
         self._launch_next_process()
+
+
+class BatchProcess(Process):
+    # TODO: Add memory and time settings
+
+    def __init__(self, *args):
+        bsub_path = self.get_bsub_path()
+        args = ['-I', '-o', '-', '-q', 'interactive'] + args
+        Process.__init__(self, bsub_path, *args)
+
+    @staticmethod
+    def get_bsub_path():
+        try:
+            bsub_path = subprocess.check_output(['which', 'bsub'])
+        except subprocess.CalledProcessError, err:
+            print 'Could not find bsub command. Run as a local Process instead.'
+            raise err
+        finally:
+            return bsub_path
+
+
 
 def process_generator():
     exe = '/bin/echo'
@@ -158,7 +184,7 @@ def main():
     #    scheduler.add_process(process)
     #scheduler.run_processes()
 
-    print 'Running Chain Processes'
+    print 'Running Chain Processes....'
     for chain in (ProcessChain((process for process in process_generator())) for n in xrange(0, 10)):
         scheduler.add_process(chain)
     scheduler.run_processes()

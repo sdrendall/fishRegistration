@@ -10,6 +10,7 @@ def generateParser():
         description="A script to register images to the Allen Brain Atlas using ITK.")
     parser.add_argument('-e', '--experimentPath', default=os.getcwd())
     parser.add_argument('-b', '--useBatch', action='store_true')
+    parser.add_argument('-n', '--maxThreads', default=float('inf'))
     return parser
 
 
