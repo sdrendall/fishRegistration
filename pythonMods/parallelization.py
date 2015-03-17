@@ -77,12 +77,6 @@ class Task(object):
         return d
 
 
-def echo(stuff):
-    print stuff
-
-import pipes
-pipes.Template.open().write()
-
 class Process(Task, protocol.ProcessProtocol):
 
     def __init__(self, executable, *args, **kwargs):
@@ -152,25 +146,27 @@ class BatchProcess(Process):
     # TODO: Add memory and time settings
 
     def __init__(self, *args):
-        bsub_path = self.get_bsub_path()
-        submission_args = ('bsub', '-I', '-q', 'interactive')
-        self.job_args = list(args)  # TODO tuple?
-        Process.__init__(self, bsub_path, *submission_args)
+        bsub_path = 'bsub'
+        self.submission_args = ['bsub', '-I', '-q', 'interactive']
+        self.job_args = list(args)
+        Process.__init__(self, bsub_path, *(self.submission_args + self.job_args))
 
     def launch(self):
+        self.args = self.submission_args + self.job_args
         d = Process.launch(self)
-        self.transport.write(self.job_args.join())
         return d
 
+    # TODO: Why doesn't this work on orchestra?
     @staticmethod
     def get_bsub_path():
-        try:
-            bsub_path = subprocess.check_output(['which', 'bsub'])
-        except subprocess.CalledProcessError, err:
-            print 'Could not find bsub command. Run as a local Process instead.'
-            raise err
-        finally:
-            return bsub_path
+        proc = subprocess.Popen(['which', 'bsub'], stdout = subprocess.PIPE)
+        # TODO: raise process failed error if data(1) is not None
+        return proc.communicate()[0]
+
+
+def echo(stuff):
+    print stuff
+
 
 def process_generator():
     exe = '/bin/echo'
