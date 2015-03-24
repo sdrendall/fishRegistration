@@ -26,15 +26,15 @@ def generateReferenceOutputPaths(imdata):
 
 
 def generateReferenceImagePath(downsampledImagePath):
-    return downsampledImagePath.rsplit('_', 1)[0] + u'_registeredAtlasReferenceImage.mhd' # remove '_downsampled'
+    return downsampledImagePath.rsplit('_', 1)[0] + u'_registeredAtlasReferenceImage.mhd'  # remove '_downsampled'
 
 
 def generateLabelsPath(downsampledImagePath):
-    return downsampledImagePath.rsplit('_', 1)[0] + u'_registeredAtlasLabels.mhd' # remove '_downsampled'
+    return downsampledImagePath.rsplit('_', 1)[0] + u'_registeredAtlasLabels.mhd'  # remove '_downsampled'
 
 
 def generateMetricLogPath(downsampledImagePath):
-    return downsampledImagePath.rsplit('_', 1)[0] + u'_registrationMetricLog.tsv' # remove '_downsampled'
+    return downsampledImagePath.rsplit('_', 1)[0] + u'_registrationMetricLog.tsv'  # remove '_downsampled'
 
 
 def registerImage(imdata, expPath, submitJob=False):
