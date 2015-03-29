@@ -1,4 +1,4 @@
-TODO: Use Templates!!!
+// TODO: Use Templates!!!
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
@@ -32,11 +32,7 @@ TODO: Use Templates!!!
 #include "itkMemoryProbesCollectorBase.h"
 #include "itkCommand.h"
 
-// Globals (TODO: Do this differently)
-const char * atlasReferencePath = "/home/sr235/atlasVolume/atlasVolume.mhd";
-const char * atlasAnnotationsPath = "/home/sr235/atlasVolume/annotation.mhd";
-//const char * atlasReferencePath = "/home/sam/Dropbox/grayLab/allenReferenceAtlas_mouseCoronal/atlasVolume/atlasVolume.mhd";
-//const char * atlasAnnotationsPath = "/home/sam/Dropbox/grayLab/allenReferenceAtlas_mouseCoronal/atlasVolume/annotation.mhd";
+// Should I make this adjustable?
 const unsigned int BSplineOrder = 3;
 
 // Types
@@ -60,8 +56,8 @@ AnnotationImageType::Pointer rotateAnnotationImage(AnnotationImageType::Pointer)
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer, ImageType::Pointer);
 BSplineTransformType::Pointer computeBsplineTransform(ImageType::Pointer, ImageType::Pointer, const char *);
 
-void applyTransformToAnnotations(RigidTransformType::Pointer, BSplineTransformType::Pointer, ImageType::Pointer, const char *, const char *, int);
-void applyTransformToReference(RigidTransformType::Pointer, BSplineTransformType::Pointer, ImageType::Pointer, const char *, const char *, int);
+void applyTransformToThirtyTwoBitAtlas(RigidTransformType::Pointer, BSplineTransformType::Pointer, ImageType::Pointer, const char *, const char *, int);
+void applyTransformToEightBitAtlas(RigidTransformType::Pointer, BSplineTransformType::Pointer, ImageType::Pointer, const char *, const char *, int);
 
 void writeImage(ImageType::Pointer, const char *);
 void displayRegistrationResults(itk::OptimizerParameters<double>, const unsigned int, const double);
@@ -161,15 +157,29 @@ public:
 
 int main(int argc, char *argv[]){
     //Check args
-    if (argc < 6) {
+    if (argc < 8) {
             std::cerr << "Missing Parameters " << std::endl;
             std::cerr << "Usage: " << argv[0];
-            std::cerr << " fixedImage sliceIndex";
+            std::cerr << " inputImagePath sliceIndex";
             std::cerr << " referenceImageOutputPath";
             std::cerr << " annotationImageOutputPath";
+            std::cerr << " hemisphereImageOutputPath";
             std::cerr << " registrationLogPath";
+            std::cerr << " atlasReferencePath";
+            std::cerr << " atlasAnnotationsPath";
+            std::cerr << " atlasHemispheresPath";
             return EXIT_FAILURE;
     }
+
+    // Input paths
+    const char * inputImagePath = argv[1];
+    const char * referenceImageOutputPath = argv[3];
+    const char * annotationImageOutputPath = argv[4];
+    const char * hemisphereImageOutputPath = argv[5];
+    const char * registrationLogPath = argv[6];
+    const char * atlasReferencePath = argv[7]; 
+    const char * atlasAnnotationsPath = argv[8]; 
+    const char * atlasHemispheresPath = argv[9]; 
 
     // Declare Image, filter types ect
     typedef itk::ImageFileReader<ImageType> ReaderType;
@@ -183,7 +193,7 @@ int main(int argc, char *argv[]){
     
     // Load the input image
     ReaderType::Pointer inputReader = ReaderType::New();
-    inputReader->SetFileName(argv[1]);
+    inputReader->SetFileName(inputImagePath);
     inputReader->Update();
     ImageType::Pointer inputImage = inputReader->GetOutput();
 
@@ -208,18 +218,18 @@ int main(int argc, char *argv[]){
     rigidResampler->SetDefaultPixelValue(0);
 
     // Compute the Bspline transform mapping the atlas slice to the input image
-    BSplineTransformType::Pointer deformableTransform = computeBsplineTransform(rigidResampler->GetOutput(), inputImage, argv[5]); // (movingImage, fixedImage, logPath)
+    BSplineTransformType::Pointer deformableTransform = computeBsplineTransform(rigidResampler->GetOutput(), inputImage, registrationLogPath); // (movingImage, fixedImage, logPath)
 
     // Apply the computed transforms to the corresponding reference and annotation images, and save the results
-    // applyTransform(rigidTransform, deformableTransform, inputImage, outputName, atlasPath, sliceIndex)
-    applyTransformToReference(rigidTransform, deformableTransform, inputImage, argv[3], atlasReferencePath, sliceIndex);
-    applyTransformToAnnotations(rigidTransform, deformableTransform, inputImage, argv[4], atlasAnnotationsPath, sliceIndex);
+    // applyAtlas(rigidTransform, deformableTransform, inputImage, outputName, atlasPath, sliceIndex)
+    applyTransformToEightBitAtlas(rigidTransform, deformableTransform, inputImage, referenceImageOutputPath, atlasReferencePath, sliceIndex);
+    applyTransformToEightBitAtlas(rigidTransform, deformableTransform, inputImage, hemisphereImageOutputPath, atlasHemispheresPath, sliceIndex);
+    applyTransformToThirtyTwoBitAtlas(rigidTransform, deformableTransform, inputImage, annotationImageOutputPath, atlasAnnotationsPath, sliceIndex);
 
     return EXIT_SUCCESS;
 }
 
-
-void applyTransformToReference(RigidTransformType::Pointer rigidTransform, 
+void applyTransformToEightBitAtlas(RigidTransformType::Pointer rigidTransform, 
         BSplineTransformType::Pointer deformableTransform, ImageType::Pointer inputImage, 
         const char * outputName, const char * atlasReferencePath, int sliceIndex) {
 
@@ -262,7 +272,7 @@ void applyTransformToReference(RigidTransformType::Pointer rigidTransform,
     outputWriter->Update();
 }
 
-void applyTransformToAnnotations(RigidTransformType::Pointer rigidTransform, 
+void applyTransformToThirtyTwoBitAtlas(RigidTransformType::Pointer rigidTransform, 
         BSplineTransformType::Pointer deformableTransform, ImageType::Pointer inputImage, 
         const char * outputName, const char * atlasAnnotationsPath, int sliceIndex) {
 

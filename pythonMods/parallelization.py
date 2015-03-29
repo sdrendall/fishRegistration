@@ -63,11 +63,16 @@ class Task(object):
             d.callback(result)
         return d
 
-    def fire_fire_on_completion_deferreds(self):
+    def fire_fire_on_completion_deferreds(self, arg=None):
+        """
+        Fires a list of deferreds once the task ends
+        :param arg: An argument to call the deferreds with
+        :return: void
+        """
         while self.fire_on_completion_deferreds:
             d = self.fire_on_completion_deferreds.pop()
             try:
-                d.callback(None)
+                d.callback(arg)
             except defer.AlreadyCalledError:
                 pass
 
@@ -85,11 +90,12 @@ class Process(Task, protocol.ProcessProtocol):
         :param args: Arguments to the Executable being called
         :param output_callback: A function to be called with data from stdout
         :param error_callback: A function to be called with data from stderr
-        :param kwargs: Additional keyword arguments, these are largely unused
+        :param kwargs: Additional keyword arguments, currently output_callback and error_callback
+
         """
         super(Process, self).__init__(**kwargs)
         self.exe = executable
-        self.args = args
+        self.args = list(args)
         self.output_callback = kwargs.get('output_callback', echo)
         self.error_callback = kwargs.get('error_callback', echo)
         self.fire_on_completion_deferreds = list()
@@ -106,7 +112,8 @@ class Process(Task, protocol.ProcessProtocol):
         self.error_callback(data)
 
     def processEnded(self, reason):
-        self.fire_fire_on_completion_deferreds()
+        # TODO: Figure out what reason (a Failure) contains if process succeeds vs fails
+        self.fire_fire_on_completion_deferreds(reason)
 
 
 class ProcessChain(Task):

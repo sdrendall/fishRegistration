@@ -1,108 +1,95 @@
 #!/usr/bin/python
 
-import os, json, argparse
-from pythonMods import jsonTools
+import os
+import argparse
+from pythonMods import jsonTools, parallelization
 import subprocess as sp
 
 
-def generateParser():
+def create_parser():
     parser = argparse.ArgumentParser(
         description="A script to register images to the Allen Brain Atlas using ITK.")
     parser.add_argument('-e', '--experimentPath', default=os.getcwd())
     parser.add_argument('-b', '--useBatch', action='store_true')
     parser.add_argument('-n', '--maxThreads', default=float('inf'))
+    parser.add_argument('-a', '--refAtlasPath',
+                        default=os.path.expanduser('~/code/fishRegistration/atlasVolume/atlasVolume.mhd'))
+    parser.add_argument('-h', '--hemiAtlasPath',
+                        default=os.path.expanduser('~/code/fishRegistration/atlasVolume/hemisphereMask.mhd'))
+    parser.add_argument('-l', '--annoAtlasPath',
+                        default=os.path.expanduser('~/code/fishRegistration/atlasVolume/annotation.mhd'))
     return parser
 
 
-def generateArgString(imdata):
-    return "registerSliceToAtlas '{downsampledImagePath}' '{atlasIndex}' \
-        '{registeredAtlasReferenceImagePath}' '{registeredAtlasLabelsPath}' '{registrationMetricLogPath}'".format(**imdata)
+def create_arg_list(im_data, args):
+    arg_str = "registerSliceToAtlas '{downsampledImagePath}' '{atlasIndex}'" \
+        "'{registeredAtlasReferenceImagePath}' '{registeredAtlasLabelsPath}' " \
+        "'{registeredHemisphereLabelsPath}' '{registrationMetricLogPath}' ".format(**im_data) + \
+        "'{refAtlasPath}' '{annoAtlasPath}' '{hemiAtlasPath}' ".format(**args)
+    return arg_str.split()
 
 
-def generateReferenceOutputPaths(imdata):
-    imdata['registeredAtlasReferenceImagePath'] = generateReferenceImagePath(imdata['downsampledImagePath'])
-    imdata['registeredAtlasLabelsPath'] = generateLabelsPath(imdata['downsampledImagePath']) 
-    imdata['registrationMetricLogPath'] = generateMetricLogPath(imdata['downsampledImagePath'])
+def create_output_paths(im_data):
+    im_data['registeredAtlasReferenceImagePath'] = compose_output_path(im_data, u'_registeredAtlasReferenceImage.mhd')
+    im_data['registeredAtlasLabelsPath'] = compose_output_path(im_data, u'_registeredAtlasLabels.mhd')
+    im_data['registrationMetricLogPath'] = compose_output_path(im_data, u'_registrationMetricLog.tsv')
+    im_data['registeredHemisphereLabelsPath'] = compose_output_path(im_data, u'_registeredHemisphereLabels.mhd')
 
 
-def generateReferenceImagePath(downsampledImagePath):
-    return downsampledImagePath.rsplit('_', 1)[0] + u'_registeredAtlasReferenceImage.mhd'  # remove '_downsampled'
+def compose_output_path(im_data, suffix):
+    # removes '_downsampled' from the downsampled image path and appends a suffix
+    return im_data['downsampledImagePath'].rsplit('_', 1)[0] + suffix
 
 
-def generateLabelsPath(downsampledImagePath):
-    return downsampledImagePath.rsplit('_', 1)[0] + u'_registeredAtlasLabels.mhd'  # remove '_downsampled'
+def create_exit_callback(im_data, handler):
+    def callback(result):
+        # TODO: Check result
+        im_data['registrationSuccessful'] = True
+        handler.update_metadata()
+    return callback
 
 
-def generateMetricLogPath(downsampledImagePath):
-    return downsampledImagePath.rsplit('_', 1)[0] + u'_registrationMetricLog.tsv'  # remove '_downsampled'
+def create_output_callback(im_data):
+    f = im_data['registrationOutputLogPath'].open()
+    def callback(data):
 
 
-def registerImage(imdata, expPath, submitJob=False):
-    generateReferenceOutputPaths(imdata)
-    argStr = generateArgString(imdata)
-    if submitJob:
-        openRegistrationProcess_bsub(imdata, argStr, expPath)
+def create_registration_process(im_data, args):
+    arg_list = create_arg_list(im_data, args)
+    im_data['registrationOutputLogPath'] = compose_output_path(im_data, u'_registrationOutputLog')
+    output_callback = create_output_callback(im_data)
+    if args.useBatch:
+        return parallelization.BatchProcess(*arg_list)
     else:
-        openRegistrationProcess_local(imdata, argStr, expPath)
-
-
-def openRegistrationProcess_local(imdata, argStr, expPath):
-    try:
-        print "Registering %s......" % imdata['downsampledImagePath']
-        sp.call(argStr, shell=True, cwd=expPath, env=os.environ)
-    except sp.CalledProcessError as e:
-        print "Registration failed for %s!" % imdata['downsampledImagePath']
-        print "registerSliceToAtlas returned with return code: %r" % e.returncode
-        print "Output: %s" % e.output
-        imdata['registrationSuccessful'] = False
-    else:
-        imdata['registrationSuccessful'] = True
-
-
-def openRegistrationProcess_bsub(imdata, argStr, expPath):
-    argStr = 'bsub -q short -W 12:00 ' + argStr   # -n 4 -R "ptile[span=4]"
-    try:
-        sp.call(argStr, shell=True, cwd=expPath, env=os.environ)
-    except:
-        print 'Job submission failed!'
-        imdata['registrationSuccessful'] = False
-    else:
-        imdata['registrationSuccessful'] = True
-
-
-def loadJson(jsonPath):
-    jsonFile = open(jsonPath, 'r')
-    dictList = json.load(jsonFile)
-    jsonFile.close()
-    return dictList
-
-
-def updateJson(jsonPath, dictList):
-    jsonFile = open(jsonPath, 'w')
-    json.dump(dictList, jsonFile, sort_keys=True, indent=4)
-    jsonFile.close()
+        return parallelization.Process('registerSliceToAtlas', *arg_list)
 
 
 def main():
-    parser = generateParser()
+    parser = create_parser()
     args = parser.parse_args()
-    expPath = args.experimentPath
+    exp_path = args.experimentPath
 
     # Load JSON
-    metadataHandler = jsonTools.MetadataHandler(experiment_path=expPath)
-    metadata = metadataHandler.load_metadata()
+    metadata_handler = jsonTools.MetadataHandler(experiment_path=exp_path)
+    metadata = metadata_handler.load_metadata()
 
-    # Lists and dicts are mutable so they will be modified in place
-    for imdata in metadata:
-        if imdata['exclude'] == 0:
-            # Run registration pipeline
-            registerImage(imdata, expPath, submitJob=args.useBatch)
-            # Update JSON file
-            metadataHandler.update_metadata()
+    # Create and configure the process scheduler
+    scheduler = parallelization.Scheduler(max_threads=args.maxThreads)
+
+    for im_data in metadata:
+        if not im_data['exclude']:
+            create_output_paths(im_data)
+                process = create_registration_process(im_data, args)
+                exit_callback = create_exit_callback(im_data, metadata_handler)
+
         else:
-            print "Excluding " + imdata['vsiPath']
+            print "Excluding " + im_data['vsiPath']
 
-    print 'Registration complete!'
+    print 'Registering Images.  This may take a while.....'
+
+    scheduler.run_processes()
+
+    print 'Registration Complete!'
 
 if __name__ == '__main__':
     main()
