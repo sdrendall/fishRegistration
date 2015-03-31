@@ -70,7 +70,7 @@ def create_callbacks(args, im_data, handler):
 
 def create_registration_process(im_data, args):
     arg_list = create_arg_list(im_data, args)
-    im_data['registrationOutputLogPath'] = compose_output_path(im_data, u'_registrationOutputLog')
+    im_data['registrationOutputLogPath'] = compose_output_path(im_data, u'_registrationOutputLog.txt')
     if args.useBatch:
         return parallelization.BatchProcess(*arg_list, cwd=args.experimentPath)
     else:

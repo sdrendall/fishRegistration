@@ -120,7 +120,7 @@ class Process(Task, protocol.ProcessProtocol):
 
     def launch(self):
         from twisted.internet import reactor
-        reactor.spawnProcess(self, executable=self.exe, args=self.args, env=self.env, cwd=self.cwd)
+        reactor.spawnProcess(self, executable=self.exe, args=self.args, env=self.env, path=self.cwd)
         return self.defer_until_process_completion()
 
     def outReceived(self, data):
