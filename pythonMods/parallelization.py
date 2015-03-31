@@ -22,6 +22,10 @@ class Scheduler(object):
         return process.defer_until_process_completion()
 
     def run_processes(self):
+        """
+        Runs all of the processes queued with add_process.  Blocks until all processes are complete
+        :return:
+        """
         from twisted.internet import reactor
         while self.processes and self.active_processes < self.max_threads:
             self._open_next_process()
@@ -29,6 +33,12 @@ class Scheduler(object):
         reactor.run()
 
     def _open_next_process(self):
+        """
+        Attempts to open the next process in the process queue.  If the queue is empty, this function creates a
+        deferred that is fired when all process are fired.  When fired, this deferred stops the reactor, unblocking
+        the run_processes call.
+        :return:
+        """
         if self.processes and self.active_processes < self.max_threads:
             p = self.processes.pop(0)
             d = p.launch()
@@ -40,13 +50,23 @@ class Scheduler(object):
             self.stop_reactor_deferred = defer.DeferredList(self.fired_on_completion_deferreds, consumeErrors=True)
             self.stop_reactor_deferred.addBoth(self._stop_reactor_callback)
 
-
     def _stop_reactor_callback(self, results):
+        """
+        Stops the reactor.  Chained to a Deferred that is fired when all processes complete.
+        :param results: Argument supplied by the previous callbacks in the deferred.
+        :return:
+        """
         from twisted.internet import reactor
         reactor.stop()
         return results
 
     def _process_complete_callback(self, results):
+        """
+        Callback called when a process is completed.
+        Decrements the active_processes counter, and calls open_next_process()
+        :param results:
+        :return:
+        """
         self.active_processes -= 1
         print 'Process Complete'
         print 'Active Processes:', self.active_processes
@@ -62,6 +82,10 @@ class Task(object):
         self.fire_on_completion_deferreds = list()
 
     def launch(self):
+        """
+        Launches the task.
+        :return:
+        """
         d = self.defer_until_process_completion()
         try:
             result = self.action()
@@ -87,6 +111,10 @@ class Task(object):
 #                print 'Deferred already fired!'
 
     def defer_until_process_completion(self):
+        """
+
+        :return:
+        """
         d = defer.Deferred()
         d.addBoth(self._test_callback)
         self.fire_on_completion_deferreds.append(d)
