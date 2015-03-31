@@ -3,29 +3,39 @@
 import os
 import argparse
 from pythonMods import jsonTools, parallelization
-import subprocess as sp
 
 
 def create_parser():
     parser = argparse.ArgumentParser(
         description="A script to register images to the Allen Brain Atlas using ITK.")
-    parser.add_argument('-e', '--experimentPath', default=os.getcwd())
-    parser.add_argument('-b', '--useBatch', action='store_true')
-    parser.add_argument('-n', '--maxThreads', default=float('inf'))
+    parser.add_argument('-e', '--experimentPath', default=os.getcwd(),
+                        help='The root directory holding the experiment\'s data.  '
+                             'Defaults to the current working directory')
+    parser.add_argument('-b', '--useBatch', action='store_true',
+                        help='Submit jobs to an lsf queue')
+    parser.add_argument('-n', '--maxThreads', default=float('inf'), type=float,
+                        help='If running locally, specifies the maximum number of concurrent threads. Defaults to Inf. '
+                             'DO NOT SET IF BATCH MODE IS ENABLED')
     parser.add_argument('-a', '--refAtlasPath',
-                        default=os.path.expanduser('~/code/fishRegistration/atlasVolume/atlasVolume.mhd'))
-    parser.add_argument('-h', '--hemiAtlasPath',
-                        default=os.path.expanduser('~/code/fishRegistration/atlasVolume/hemisphereMask.mhd'))
+                        default=os.path.expanduser('~/code/fishRegistration/atlasVolume/atlasVolume.mhd'),
+                        help='Path to the reference atlas.  '
+                             'Defaults to ~/code/fishRegistration/atlasVolume/atlasVolume.mhd')
+    parser.add_argument('-s', '--hemiAtlasPath',
+                        default=os.path.expanduser('~/code/fishRegistration/atlasVolume/hemisphereMask.mhd'),
+                        help='Path to the hemisphere atlas.  '
+                             'Defaults to ~/code/fishRegistration/atlasVolume/hemisphereMask.mhd')
     parser.add_argument('-l', '--annoAtlasPath',
-                        default=os.path.expanduser('~/code/fishRegistration/atlasVolume/annotation.mhd'))
+                        default=os.path.expanduser('~/code/fishRegistration/atlasVolume/annotation.mhd'),
+                        help='Path to the atlas annotations.  '
+                             'Defaults to ~/code/fishRegistration/atlasVolume/annotation.mhd')
     return parser
 
 
 def create_arg_list(im_data, args):
-    arg_str = "registerSliceToAtlas '{downsampledImagePath}' '{atlasIndex}'" \
-        "'{registeredAtlasReferenceImagePath}' '{registeredAtlasLabelsPath}' " \
-        "'{registeredHemisphereLabelsPath}' '{registrationMetricLogPath}' ".format(**im_data) + \
-        "'{refAtlasPath}' '{annoAtlasPath}' '{hemiAtlasPath}' ".format(**args)
+    arg_str = "registerSliceToAtlas {downsampledImagePath} {atlasIndex}" \
+        "{registeredAtlasReferenceImagePath} {registeredAtlasLabelsPath} " \
+        "{registeredHemisphereLabelsPath} {registrationMetricLogPath} ".format(**im_data) + \
+        "{refAtlasPath} {annoAtlasPath} {hemiAtlasPath} ".format(**vars(args))
     return arg_str.split()
 
 
@@ -41,27 +51,30 @@ def compose_output_path(im_data, suffix):
     return im_data['downsampledImagePath'].rsplit('_', 1)[0] + suffix
 
 
-def create_exit_callback(im_data, handler):
-    def callback(result):
-        # TODO: Check result
+def create_callbacks(args, im_data, handler):
+    # This log file will be closed by the exit callback
+    log_path = os.path.join(args.experimentPath, im_data['registrationOutputLogPath'])
+    f = open(log_path, 'w')
+
+    def output_callback(data):
+        f.write(data)
+
+    def exit_callback(reason):
+        # TODO: Check reason
         im_data['registrationSuccessful'] = True
+        f.close()
         handler.update_metadata()
-    return callback
 
-
-def create_output_callback(im_data):
-    f = im_data['registrationOutputLogPath'].open()
-    def callback(data):
+    return output_callback, exit_callback
 
 
 def create_registration_process(im_data, args):
     arg_list = create_arg_list(im_data, args)
     im_data['registrationOutputLogPath'] = compose_output_path(im_data, u'_registrationOutputLog')
-    output_callback = create_output_callback(im_data)
     if args.useBatch:
-        return parallelization.BatchProcess(*arg_list)
+        return parallelization.BatchProcess(*arg_list, cwd=args.experimentPath)
     else:
-        return parallelization.Process('registerSliceToAtlas', *arg_list)
+        return parallelization.Process('registerSliceToAtlas', *arg_list, cwd=args.experimentPath)
 
 
 def main():
@@ -79,8 +92,12 @@ def main():
     for im_data in metadata:
         if not im_data['exclude']:
             create_output_paths(im_data)
-                process = create_registration_process(im_data, args)
-                exit_callback = create_exit_callback(im_data, metadata_handler)
+            process = create_registration_process(im_data, args)
+            output_callback, exit_callback = create_callbacks(args, im_data, metadata_handler)
+            process.output_callback = process.error_callback = output_callback
+            # Adding a process to the scheduler returns a twisted deferred that is fired when the process completes
+            fired_on_process_completion = scheduler.add_process(process)
+            fired_on_process_completion.addBoth(exit_callback)
 
         else:
             print "Excluding " + im_data['vsiPath']

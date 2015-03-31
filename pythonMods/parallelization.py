@@ -1,8 +1,6 @@
 from twisted.internet import defer, protocol
 import os
 import subprocess
-import pipes
-import tempfile
 
 
 class Scheduler(object):
@@ -15,6 +13,11 @@ class Scheduler(object):
         self.stop_reactor_deferred = None
 
     def add_process(self, process):
+        """
+        Adds (queues) a process on the scheduler
+        :param process: The process to be added
+        :return deferred: A Twisted deferred that is fired on the processes completion
+        """
         self.processes.append(process)
         return process.defer_until_process_completion()
 
@@ -29,26 +32,32 @@ class Scheduler(object):
         if self.processes and self.active_processes < self.max_threads:
             p = self.processes.pop(0)
             d = p.launch()
-            d.addCallback(self._process_complete_callback)
+            d.addBoth(self._process_complete_callback)
             self.fired_on_completion_deferreds.append(d)
             self.active_processes += 1
         elif self.stop_reactor_deferred is None and not self.processes:
             # If I get here, the processes are exhausted, and the exit deferred hasn't been created yet
-            self.stop_reactor_deferred = defer.DeferredList(self.fired_on_completion_deferreds)
+            self.stop_reactor_deferred = defer.DeferredList(self.fired_on_completion_deferreds, consumeErrors=True)
             self.stop_reactor_deferred.addBoth(self._stop_reactor_callback)
+
 
     def _stop_reactor_callback(self, results):
         from twisted.internet import reactor
         reactor.stop()
+        return results
 
     def _process_complete_callback(self, results):
         self.active_processes -= 1
+        print 'Process Complete'
+        print 'Active Processes:', self.active_processes
+        print 'Processes Remaining:', len(self.processes)
         self._open_next_process()
+        return results
 
 
 class Task(object):
 
-    def __init__(self, action=None):
+    def __init__(self, action=None, *args, **kwargs):
         self.action = action
         self.fire_on_completion_deferreds = list()
 
@@ -69,24 +78,31 @@ class Task(object):
         :param arg: An argument to call the deferreds with
         :return: void
         """
+        print 'Firing Completion Deferreds'
+        print self.fire_on_completion_deferreds
         while self.fire_on_completion_deferreds:
             d = self.fire_on_completion_deferreds.pop()
-            try:
-                d.callback(arg)
-            except defer.AlreadyCalledError:
-                pass
+            d.callback(arg)
+#            except defer.AlreadyCalledError:
+#                print 'Deferred already fired!'
 
     def defer_until_process_completion(self):
         d = defer.Deferred()
+        d.addBoth(self._test_callback)
         self.fire_on_completion_deferreds.append(d)
         return d
+
+    @staticmethod
+    def _test_callback(result):
+        print 'Test Callback'
+        return result
 
 
 class Process(Task, protocol.ProcessProtocol):
 
-    def __init__(self, executable, *args, **kwargs):
+    def __init__(self, exe, *args, **kwargs):
         """
-        :param executable: Path to the executable to be called
+        :param exe: Path to the executable to be called
         :param args: Arguments to the Executable being called
         :param output_callback: A function to be called with data from stdout
         :param error_callback: A function to be called with data from stderr
@@ -94,15 +110,17 @@ class Process(Task, protocol.ProcessProtocol):
 
         """
         super(Process, self).__init__(**kwargs)
-        self.exe = executable
+        self.exe = exe
         self.args = list(args)
         self.output_callback = kwargs.get('output_callback', echo)
         self.error_callback = kwargs.get('error_callback', echo)
+        self.env = kwargs.get('env', os.environ)
+        self.cwd = kwargs.get('cwd', os.getcwd())
         self.fire_on_completion_deferreds = list()
 
     def launch(self):
         from twisted.internet import reactor
-        reactor.spawnProcess(self, executable=self.exe, args=self.args, env=os.environ)
+        reactor.spawnProcess(self, executable=self.exe, args=self.args, env=self.env, cwd=self.cwd)
         return self.defer_until_process_completion()
 
     def outReceived(self, data):
@@ -113,6 +131,8 @@ class Process(Task, protocol.ProcessProtocol):
 
     def processEnded(self, reason):
         # TODO: Figure out what reason (a Failure) contains if process succeeds vs fails
+        print 'Process Ended!'
+        print reason
         self.fire_fire_on_completion_deferreds(reason)
 
 
@@ -140,7 +160,7 @@ class ProcessChain(Task):
         if self.processes:
             p = self.processes.pop(0)
             d = p.launch()
-            d.addCallback(self._launch_next_process_callback)
+            d.addBoth(self._launch_next_process_callback)
         else:
             # If I get here, the process chain has been exhausted
             self.fire_fire_on_completion_deferreds()
@@ -152,11 +172,11 @@ class ProcessChain(Task):
 class BatchProcess(Process):
     # TODO: Add memory and time settings
 
-    def __init__(self, *args):
+    def __init__(self, *args, **kwargs):
         bsub_path = 'bsub'
         self.submission_args = ['bsub', '-I', '-q', 'interactive']
         self.job_args = list(args)
-        Process.__init__(self, bsub_path, *(self.submission_args + self.job_args))
+        Process.__init__(self, bsub_path, *(self.submission_args + self.job_args), **kwargs)
 
     def launch(self):
         self.args = self.submission_args + self.job_args
