@@ -416,6 +416,8 @@ AnnotationImageType::Pointer getCoronalAnnotationAtlasSlice(int sliceIndex, cons
     // atlasSlice = rotateAnnotationImage(atlasSlice);
     return atlasSlice;
 }
+
+
 RigidTransformType::Pointer getRigidRegistrationTransform(ImageType::Pointer inputImage, ImageType::Pointer atlasSlice) {
     typedef itk::RegularStepGradientDescentOptimizer OptimizerType;
     typedef itk::MeanSquaresImageToImageMetric<ImageType, ImageType> MetricType;

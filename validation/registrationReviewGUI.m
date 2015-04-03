@@ -169,6 +169,7 @@ function displayExclusionMask_checkbox_Callback(hObject, eventdata, handles)
 function showOverlay_Callback(hObject, eventdata, handles)
     handles = setImageToDisplay(handles, 'overlay');
     refreshDisplay(handles)
+    guidata(hObject, handles)
 
 
 % --- Executes on button press in overlaySlice.
@@ -361,9 +362,9 @@ function handles = updateCurrentSet(handles, set)
     handles.jsonData{handles.currentSetKey} = set;
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%% DATA LOADING %%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% DATA LOADING %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % These functions load data from the current set (loading isn't really the best word, should have said get)
 %  They aren't responsible for changing the state of the program, or the appearance of the GUI
@@ -470,9 +471,9 @@ function im = readImage(filepath)
     end
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% JSON FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% JSON FUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 function handles = loadJsonData(handles)
@@ -486,6 +487,17 @@ function handles = loadJsonData(handles)
 
     disp(['Loading data from ', handles.jsonPath])
     jsonData = json.read(handles.jsonPath);
+
+    % The new JSON API I am using will try to import a list of json objects as a structure array.
+    %  This is not ideal for a number of reasons, first and formost being that this code expects a cell
+    %  array of structures.  Here, I convert the jsonData array to a cell if it is not one.
+    if ~iscell(jsonData)
+        structArray = jsonData;
+        jsonData = cell(size(jsonData));
+        for i = 1:length(jsonData)
+            jsonData(i) = {structArray(i)};
+        end
+    end
 
     % Set the reviewed field to false for data sets that don't have it
     for i = 1:length(jsonData)
