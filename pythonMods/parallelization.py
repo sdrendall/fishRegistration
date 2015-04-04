@@ -102,8 +102,6 @@ class Task(object):
         :param arg: An argument to call the deferreds with
         :return: void
         """
-        print 'Firing Completion Deferreds'
-        print self.fire_on_completion_deferreds
         while self.fire_on_completion_deferreds:
             d = self.fire_on_completion_deferreds.pop()
             d.callback(arg)
@@ -202,7 +200,7 @@ class BatchProcess(Process):
 
     def __init__(self, *args, **kwargs):
         bsub_path = 'bsub'
-        self.submission_args = ['bsub', '-I', '-q', 'interactive']
+        self.submission_args = ['bsub', '-W', '12:00', '-q', 'short']
         self.job_args = list(args)
         Process.__init__(self, bsub_path, *(self.submission_args + self.job_args), **kwargs)
 
