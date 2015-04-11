@@ -426,6 +426,7 @@ function handles = loadImages(handles)
     handles = loadReferenceImage(handles, currentSet);
     handles = loadSliceImage(handles, currentSet);
     handles = loadReferenceLabels(handles, currentSet);
+    handles = loadHemisphereLabels(handles, currentSet);
     handles = generateOverlay(handles);
 
 
@@ -437,12 +438,16 @@ function handles = loadReferenceImage(handles, setData)
 function handles = loadSliceImage(handles, setData)
     imPath = setData.downsampledImagePath;
     handles.sliceIm = loadRegistrationImage(handles, imPath);
-    handles.hemiIm = true(size(handles.sliceIm));  % TODO: Temporary - for debugging
 
 
 function handles = loadReferenceLabels(handles, setData)
     imPath = setData.registeredAtlasLabelsPath;
     handles.labelIm = loadRegistrationImage(handles, imPath);
+
+
+function handles = loadHemisphereLabels(handles, setData)
+    imPath = setData.registeredHemisphereLabelsPath;
+    handles.hemiIm = loadRegistrationImage(handles, imPath);
 
 
 function im = loadRegistrationImage(handles, imPath)

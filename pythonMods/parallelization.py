@@ -157,8 +157,6 @@ class Process(Task, protocol.ProcessProtocol):
 
     def processEnded(self, reason):
         # TODO: Figure out what reason (a Failure) contains if process succeeds vs fails
-        print 'Process Ended!'
-        print reason
         self.fire_fire_on_completion_deferreds(reason)
 
 
@@ -196,6 +194,10 @@ class ProcessChain(Task):
 
 
 class BatchProcess(Process):
+    """
+    A process that is submitted to an lsf queue.  Currently works with the HMS Orchestra cluster, and submits to the
+    'short' queue
+    """
     # TODO: Add memory and time settings
 
     def __init__(self, *args, **kwargs):
@@ -205,6 +207,7 @@ class BatchProcess(Process):
         Process.__init__(self, bsub_path, *(self.submission_args + self.job_args), **kwargs)
 
     def launch(self):
+        print 'Launching Batch Job'
         self.args = self.submission_args + self.job_args
         d = Process.launch(self)
         return d

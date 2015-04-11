@@ -30,6 +30,9 @@ def generate_parser():
     parser.add_argument('-b', '--useBatch', action='store_true', default=False,
                         help='Submit processes to an lsf cluster. Warning: Mistakes will take longer to catch, '
                              'prototype locally before using this option.')
+    parser.add_argument('-s', '--hemisphere', default='both', choices=set(('left', 'right', 'both')),
+                        help='The hemispheres to crop images from.  Must be "left", "right", or "both".'
+                             '  Defaults to "both".')
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-a', '--useAcronyms', action='store_true', default=False,
@@ -39,14 +42,22 @@ def generate_parser():
     return parser
 
 
-def create_arg_list(metadataObject, ids, args):
+def create_arg_string(metadata_dict, ids, args):
+    # Constructs an argument string that can be used to call the matlab cropping function with the desired flags.
     arg_string = "matlab -nosplash -nodesktop -r " \
-                 "\"cropRegionsUsingAtlas('%s', '%s', [%s], 'slice order', {sliceOrder}, " \
+                 "\"cropRegionsUsingAtlas('%s', '%s', '%s', [%s], 'slice order', {sliceOrder}, " \
                  "'split channels', {splitChannels}, 'experiment path', '{experimentPath}', " \
-                 "'output path', '{outputPath}', 'region name', '{regions[0]}'); exit\""
+                 "'output path', '{outputPath}', 'region name', '{regions[0]}', 'hemisphere', '{hemisphere}', " \
+                 "'exclusions', [%s]); exit\""
     arg_string = arg_string.format(**vars(args))  # Unpack the args and insert them into the arg_string
-    arg_string = arg_string % (metadataObject['vsiPath'], metadataObject['registeredAtlasLabelsPath'],
-                               ','.join(imap(str, ids)))
+
+    # Values from metadata_dict are formatted to the arg_string next.
+    #  The regionIdsToExclude field is aliased to make this slightly more readable.
+    #
+    ex_ids = metadata_dict['regionIdsToExclude']
+    arg_string = arg_string % (metadata_dict['vsiPath'], metadata_dict['registeredAtlasLabelsPath'],
+                               metadata_dict['registeredHemisphereLabelsPath'], ','.join(imap(str, ids)),
+                               ';'.join(imap(str, ex_ids)) if ex_ids is not None else '')
 
     if args.useBatch:
         return 'bsub -q short -W 0:30 ' + arg_string
@@ -97,7 +108,7 @@ def main():
         for data in handler.metadata:
             if not data['sliceUsable'] == 'no':
                 try:
-                    arg_string = create_arg_list(data, id_list, args)
+                    arg_string = create_arg_string(data, id_list, args)
                 except KeyError:
                     print 'Registration was unsuccessful for ' + data['vsiPath'] + ' so it wont be cropped'
                 finally:

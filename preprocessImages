@@ -5,6 +5,7 @@ import os
 import argparse
 from pythonMods import jsonTools
 
+
 def generateParser():
     parser = argparse.ArgumentParser(
         description='The first script to be called in the image registration pipeline. \n\
@@ -25,7 +26,6 @@ def generateParser():
         help='The plane (channel) to be used to segment the brain section in the image from the background.\
           Ideally this plane contains an image with high tissue autofluorescence (green), and relatively sparse staining')
 
-
     return parser
 
 def findVsis(expPath):
@@ -38,10 +38,12 @@ def findVsis(expPath):
                 vsiPaths.append(relPath)
     return vsiPaths
 
+
 def generateDownsampledImagePath(vsiPath):
     vsiName = os.path.split(vsiPath)[1]
     rawName = os.path.splitext(vsiName)[0]
     return os.path.join('.registrationData', rawName + '_downsampled.mhd')
+
 
 def generatePreprocessingArgs(imageData, inputArgs):
     argStr = "matlab -nosplash -nodesktop -r \"downsampleAndSegmentVsis('%s', '%s', " \
@@ -83,7 +85,7 @@ def main():
     else:
         print "Preprocessing jobs submitted."
         print "Please wait for all jobs to complete before continuing the registration pipeline"
-    
+
 
 if __name__ == "__main__":
     main()

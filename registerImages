@@ -51,7 +51,7 @@ def compose_output_path(im_data, suffix):
     return im_data['downsampledImagePath'].rsplit('_', 1)[0] + suffix
 
 
-def create_callbacks(args, im_data, handler):
+def create_callbacks(args, im_data):
     # This log file will be closed by the exit callback
     log_path = os.path.join(args.experimentPath, im_data['registrationOutputLogPath'])
     f = open(log_path, 'w')
@@ -63,7 +63,6 @@ def create_callbacks(args, im_data, handler):
         # TODO: Check reason
         im_data['registrationSuccessful'] = True
         f.close()
-        handler.update_metadata()
 
     return output_callback, exit_callback
 
@@ -93,7 +92,7 @@ def main():
         if not im_data['exclude']:
             create_output_paths(im_data)
             process = create_registration_process(im_data, args)
-            output_callback, exit_callback = create_callbacks(args, im_data, metadata_handler)
+            output_callback, exit_callback = create_callbacks(args, im_data)
             process.output_callback = process.error_callback = output_callback
             # Adding a process to the scheduler returns a twisted deferred that is fired when the process completes
             fired_on_process_completion = scheduler.add_process(process)
@@ -105,6 +104,7 @@ def main():
     print 'Registering Images.  This may take a while.....'
 
     scheduler.run_processes()
+    metadata_handler.update_metadata()
 
     print 'Registration Complete!'
 
