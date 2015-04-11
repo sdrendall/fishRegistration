@@ -30,7 +30,7 @@ def generate_parser():
     parser.add_argument('-b', '--useBatch', action='store_true', default=False,
                         help='Submit processes to an lsf cluster. Warning: Mistakes will take longer to catch, '
                              'prototype locally before using this option.')
-    parser.add_argument('-s', '--hemisphere', default='both', choices=set(('left', 'right', 'both')),
+    parser.add_argument('-m', '--hemisphere', default='both', choices=set(('left', 'right', 'both')),
                         help='The hemispheres to crop images from.  Must be "left", "right", or "both".'
                              '  Defaults to "both".')
 
