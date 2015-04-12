@@ -1,4 +1,3 @@
-// TODO: Use Templates!!!
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
@@ -352,10 +351,11 @@ int main(int argc, char *argv[]){
     // applyAtlas(rigid_transform, deformable_transform, interpolator, input_image, outputName, atlasPath, slice_index)
 
     // Different interpolators are needed for the different atlas images to account for the differences in bit-depth.
-    typedef char ReferencePixelType;
+    typedef unsigned char ReferencePixelType;
     typedef itk::Image<ReferencePixelType, 2> ReferenceImageType;
     typedef itk::BSplineInterpolateImageFunction<ReferenceImageType, double, double> ReferenceInterpolatorType;
     ReferenceInterpolatorType::Pointer reference_interpolator = ReferenceInterpolatorType::New();
+    reference_interpolator->SetSplineOrder(3);
 
     // Apply transforms to the atlas reference image
     apply_transform_to_atlas<ReferencePixelType, ReferenceInterpolatorType::Pointer>(rigid_transform,
@@ -366,7 +366,7 @@ int main(int argc, char *argv[]){
                                                                             atlas_reference_path,
                                                                             slice_index);
 
-    typedef char HemispherePixelType;
+    typedef unsigned char HemispherePixelType;
     typedef itk::Image<HemispherePixelType, 2> HemisphereImageType;
     typedef itk::NearestNeighborInterpolateImageFunction<HemisphereImageType, double> HemisphereInterpolatorType;
     HemisphereInterpolatorType::Pointer hemisphere_interpolator = HemisphereInterpolatorType::New();

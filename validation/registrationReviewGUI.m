@@ -78,7 +78,7 @@ function loadData_Callback(hObject, eventdata, handles)
        handles = loadJsonData(handles);
     catch err
         disp('loadData failed')
-        return
+        rethrow(err)
     end
     handles = setCurrentImageSet(handles, 1);
     handles = loadCurrentImageSet(handles);

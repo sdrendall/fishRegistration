@@ -155,6 +155,8 @@ function croppedRegions = cropRegions(im, regions)
 		for j = 1:size(croppedRegion, 3)
 			croppedRegion(:,:,j) = croppedRegion(:,:,j).*regions(i).Image;
 		end
+		% Normalize values in the cropped region
+		croppedRegion(regions(i).Image) = mat2gray(croppedRegion(regions(i).Image));
 		croppedRegions{i} = croppedRegion;
 	end
 
