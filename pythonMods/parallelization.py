@@ -114,7 +114,6 @@ class Task(object):
         :return:
         """
         d = defer.Deferred()
-        d.addBoth(self._test_callback)
         self.fire_on_completion_deferreds.append(d)
         return d
 
