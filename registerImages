@@ -51,28 +51,21 @@ def compose_output_path(im_data, suffix):
     return im_data['downsampledImagePath'].rsplit('_', 1)[0] + suffix
 
 
-def create_callbacks(args, im_data, handler):
-    # This log file will be closed by the exit callback
-    log_path = os.path.join(args.experimentPath, im_data['registrationOutputLogPath'])
-    f = open(log_path, 'w')
-
-    def output_callback(data):
-        f.write(data)
+def create_exit_callback(im_data):
 
     def exit_callback(reason):
         # TODO: Check reason
         im_data['registrationSuccessful'] = True
-        f.close()
-        handler.update_metadata()
 
-    return output_callback, exit_callback
+    return exit_callback
 
 
 def create_registration_process(im_data, args):
     arg_list = create_arg_list(im_data, args)
     im_data['registrationOutputLogPath'] = compose_output_path(im_data, u'_registrationOutputLog.txt')
     if args.useBatch:
-        return parallelization.BatchProcess(*arg_list, cwd=args.experimentPath)
+        log_path = os.path.join(args.experimentPath, im_data['registrationOutputLogPath'])
+        return parallelization.BatchProcess(*arg_list, cwd=args.experimentPath, log_path=log_path)
     else:
         return parallelization.Process('registerSliceToAtlas', *arg_list, cwd=args.experimentPath)
 
@@ -93,8 +86,7 @@ def main():
         if not im_data['exclude']:
             create_output_paths(im_data)
             process = create_registration_process(im_data, args)
-            output_callback, exit_callback = create_callbacks(args, im_data, metadata_handler)
-            process.output_callback = process.error_callback = output_callback
+            exit_callback = create_exit_callback(im_data)
             # Adding a process to the scheduler returns a twisted deferred that is fired when the process completes
             fired_on_process_completion = scheduler.add_process(process)
             fired_on_process_completion.addBoth(exit_callback)
@@ -105,6 +97,7 @@ def main():
     print 'Registering Images.  This may take a while.....'
 
     scheduler.run_processes()
+    metadata_handler.update_metadata()
 
     print 'Registration Complete!'
 

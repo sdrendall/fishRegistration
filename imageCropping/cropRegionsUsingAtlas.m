@@ -1,24 +1,31 @@
-function cropRegionsUsingAtlas(vsiPath, labelsPath, ids, varargin)
-	% cropRegionsUsingAtlas(vsiPath, labelsPath, ids, [options])
+function cropRegionsUsingAtlas(vsiPath, labelsPath, hemispherePath, ids, varargin)
+	% cropRegionsUsingAtlas(vsiPath, labelsPath, hemispherePath, ids, [options])
 	%
+	% 'region name' - string, The name of the region being cropped. Used in the filename of output images
 	% 'slice order' - 1 x n array containing the permutation of the indicies 1:n 
 	%  		correpsonding to the order in which planes in the vsi files should be loaded
 	%       defaults to [3 2 1]
 	% 'split channels' - boolean, output channels individually, or as an rgb image
 	%					default false
 	% 'experiment path' - string
+	% 'hemisphere' - 'left', 'right', or 'both', Designates the hemisphere images should
+	%               be cropped from.  Defaults to 'both'
+	% 'exclusions' - N x 2 array, Designates N regions that should be excluded from crop operations.
+	%               First column corresponds to the region id, 2nd column corresponds to the hemisphere id
 
 
 	%% Parse input
-	args = parseVarargin(varargin, nargin - 3);
+	args = parseVarargin(varargin, nargin - 4);
 
 	%% Crop Each Image
 	try
 		%% Load Image Data
 		annotations = readImage(fullfile(args.exp_path, labelsPath));
+		hemisphereLabels = readImage(fullfile(args.exp_path, hemispherePath));
 
 		%% Generate Region Mask
-		mask = getRegionsById(annotations, ids);
+		mask = generateRegionMask(annotations, hemisphereLabels, ids, args);
+
 		%% Only continue if there are actually pixels to crop
 		if any(mask(:))
 			planes = unpackvsi(fullfile(args.exp_path, vsiPath), args);
@@ -45,7 +52,9 @@ function args = parseVarargin(argv, argc)
 		'split_channels', false,  ...
 		'exp_path', '', ...
 		'out_path', '', ...
-		'region_name', '');
+		'region_name', '', ...
+		'hemisphere', 'both', ...
+		'exclusions', []);
 
 	i = 1;
 	while i <= argc
@@ -64,6 +73,12 @@ function args = parseVarargin(argv, argc)
 		    i = i + 2;
 		case 'region name'
 		    args.region_name = argv{i + 1};
+		    i = i + 2;
+		case 'hemisphere'
+		    args.hemisphere = lower(argv{i + 1});
+		    i = i + 2;
+		case 'exclusions'
+		    args.exclusions = argv{i + 1};
 		    i = i + 2;
 		otherwise
 		    disp('Argument unrecognized')
@@ -98,11 +113,6 @@ function mask = rescaleMask(mask, section)
 	mask = imopen(mask, strel('disk', 2*round(pixelRatio)));
 
 
-function jsonPath = generateJsonPath(experimentPath)
-	disp('Generating Json Path.....')
-	jsonPath = fullfile(experimentPath, '/.registrationData/', 'metadata.json');
-
-
 function saveCroppedRegions(croppedRegions, basePath, args)
 	disp('Saving Cropped Regions.....')
 	ensureSaveLocation(basePath);
@@ -115,7 +125,7 @@ function saveCroppedRegions(croppedRegions, basePath, args)
 
 function ensureSaveLocation(savePath)
     saveDir = fileparts(savePath);
-    [~, ~] = mkdir(saveDir)  % Nullifying the 2nd output prevents Warning messages from being printed if the dir exists
+    [~, ~] = mkdir(saveDir);  % Nullifying the 2nd output prevents Warning messages from being printed if the dir exists
 
 
 function basePath = generateBaseOutputPath(vsiPath, args)
@@ -145,11 +155,22 @@ function croppedRegions = cropRegions(im, regions)
 		for j = 1:size(croppedRegion, 3)
 			croppedRegion(:,:,j) = croppedRegion(:,:,j).*regions(i).Image;
 		end
+		% Normalize values in the cropped region
+		croppedRegion(regions(i).Image) = mat2gray(croppedRegion(regions(i).Image));
 		croppedRegions{i} = croppedRegion;
 	end
 
 
-function mask = getRegionsById(annotations, ids)
+function mask = generateRegionMask(annotations, hemisphereLabels, ids, args)
+	annoMask = generateAnnotationsMask(annotations, ids);
+	hemisphereMask = generateHemisphereMask(hemisphereLabels, args.hemisphere);
+	exclusionMask = generateExclusionMask(annotations, hemisphereLabels, args.exclusions);
+
+    mask = annoMask & hemisphereMask & ~exclusionMask;
+
+
+function mask = generateAnnotationsMask(annotations, ids)
+    % Generates a boolean mask of the registered annotations that cooresponds to ids in the list of ids to be cropped
 	disp('Identifying Region Pixels.....')
 	mask = false(size(annotations));
 	for i = 1:length(ids)
@@ -157,22 +178,30 @@ function mask = getRegionsById(annotations, ids)
 	end
 
 
-function regData = loadRegistrationData(jsonPath)
-	% Read the data from the specified json file then filter out the useless images
-	disp('Loading Metadata.....')
-	regJson = loadjson(jsonPath);
-	disp('Disqualifying Image Sets.....')
-	regData = {};
-	for i = 1:length(regJson)
-		set = regJson{i};
-		if ~set.exclude && set.registrationSuccessful
-			regData{end + 1} = set;
-		end
-	end
+function mask = generateHemisphereMask(hemiLabels, hemisToInclude)
+    % Generates a boolean mask from the registered hemisphere lables corresponding to the hemispheres listed in
+    %   hemisToInclude
+    switch hemisToInclude
+    % Left is 2, right is 1
+    case 'left'
+        mask = hemiLabels == 2;
+    case 'right'
+        mask = hemiLabels == 1;
+    case 'both'
+        mask = hemiLabels ~= 0; % The only values in hemi labels are 0, 1 and 2
+    end
+
+
+function mask = generateExclusionMask(annotations, hemiLabels, exclusionList)
+    % Generates a boolean mask, where true corresponds to pixels that should be excluded from cropping operations.
+    mask = false(size(annotations));
+    for i = 1:size(exclusionList, 1)
+        mask = mask | (annotations == exclusionList(i, 1) & hemiLabels == exclusionList(i, 2));
+    end
 
 
 function im = readImage(filepath)
-    % Uses the appropriate load function based on the filetype found at the filepath
+    % Loads an image using the appropriate load function based on the filetype inferred from filepath
     [~, ~, ext] = fileparts(filepath);
     if strcmpi(ext, '.mhd')
         imageObj = read_mhd(filepath);
@@ -183,6 +212,7 @@ function im = readImage(filepath)
 
 
 function planes = unpackvsi(filepath, args)
+    % Loads each plane from a vsi image into a cell array
 	disp(['Loading ', filepath, '.....'])
 	r = bfGetReader(filepath);
 	np = r.getImageCount();
@@ -197,7 +227,9 @@ function planes = unpackvsi(filepath, args)
 		planes = {loadRgbVsi(r, args)};
 	end
 
+
 function im = loadRgbVsi(reader, args)
+    % Loads a vsi image as an RGB image.  Maps vsi planes to RGB channels based on the slice order argument
 	nr = reader.getSizeY;
 	nc = reader.getSizeX;
 	np = reader.getImageCount;

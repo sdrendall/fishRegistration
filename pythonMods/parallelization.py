@@ -102,8 +102,6 @@ class Task(object):
         :param arg: An argument to call the deferreds with
         :return: void
         """
-        print 'Firing Completion Deferreds'
-        print self.fire_on_completion_deferreds
         while self.fire_on_completion_deferreds:
             d = self.fire_on_completion_deferreds.pop()
             d.callback(arg)
@@ -116,7 +114,6 @@ class Task(object):
         :return:
         """
         d = defer.Deferred()
-        d.addBoth(self._test_callback)
         self.fire_on_completion_deferreds.append(d)
         return d
 
@@ -159,8 +156,6 @@ class Process(Task, protocol.ProcessProtocol):
 
     def processEnded(self, reason):
         # TODO: Figure out what reason (a Failure) contains if process succeeds vs fails
-        print 'Process Ended!'
-        print reason
         self.fire_fire_on_completion_deferreds(reason)
 
 
@@ -198,15 +193,24 @@ class ProcessChain(Task):
 
 
 class BatchProcess(Process):
+    """
+    A process that is submitted to an lsf queue.  Currently works with the HMS Orchestra cluster, and submits to the
+    'short' queue
+    """
     # TODO: Add memory and time settings
 
     def __init__(self, *args, **kwargs):
         bsub_path = 'bsub'
-        self.submission_args = ['bsub', '-I', '-q', 'interactive']
+        self.submission_args = ['bsub', '-W', '12:00', '-q', 'short']
+        self.log_path = kwargs.get('log_path', None)
+        if self.log_path is not None:
+            log_string = '-o %s -e %s ' % (self.log_path, self.log_path)
+            self.submission_args += log_string.split()
         self.job_args = list(args)
         Process.__init__(self, bsub_path, *(self.submission_args + self.job_args), **kwargs)
 
     def launch(self):
+        print 'Launching Batch Job'
         self.args = self.submission_args + self.job_args
         d = Process.launch(self)
         return d
