@@ -14,9 +14,9 @@ def generateParser():
         help='Specifies the root directory containing the data to be processed.  Defaults to the current directory.')
     parser.add_argument('-b', '--useBatch', default=False, action='store_true',
         help='Parallelizes computation by submitting jobs to an LSF queue, using the bsub command.')
-    parser.add_argument('--flip', default=0, action='store_const', const=1,
+    parser.add_argument('--flip', default=False, action='store_true',
         help='Flips the image vertically during preprocessing')
-    parser.add_argument('--flop', default=0, action='store_const', const=1,
+    parser.add_argument('--flop', default=False, action='store_true',
         help='Flips the image horizontally during preprocessing')
     parser.add_argument('-p', '--registrationPlane', default=1, type=int,
         help='The image plane (channel) to be registered to the atlas.\
@@ -45,9 +45,10 @@ def generateDownsampledImagePath(vsiPath):
 
 def generatePreprocessingArgs(imageData, inputArgs):
     argStr = "matlab -nosplash -nodesktop -r \"downsampleAndSegmentVsis('%s', '%s', " \
-        "'Flip', {flip}, 'Flop', {flop}, 'registrationPlane', {registrationPlane}, 'segmentationPlane', {segmentationPlane});" \
-        " exit\""
-    argStr = argStr % (os.path.abspath(imageData['vsiPath']), os.path.abspath(imageData['downsampledImagePath']))
+        "%s %s 'registrationPlane', {registrationPlane}, 'segmentationPlane', {segmentationPlane});" \
+        " exit\"" 
+    argStr = argStr % (os.path.abspath(imageData['vsiPath']), os.path.abspath(imageData['downsampledImagePath']),
+                        "'flip'," if inputArgs.flip else '', "'flop'," if inputArgs.flop else '')
     argStr = argStr.format(**vars(inputArgs))
 
     if inputArgs.useBatch:
