@@ -13,7 +13,7 @@ function section = findBrainSection_AC(im, mask)
 
 	% Segment with active contour
 	disp('Determining brain section.....')
-	section = activecontour(im, mask, 2000);
+	section = activecontour(im, mask, 4000);
 
 	% Clean up the resulting image
 	disp('Cleaning up brain section.....')

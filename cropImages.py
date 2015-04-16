@@ -106,7 +106,7 @@ def main():
     # TODO: Sort out this mess...
     for id_list in id_list_gen:
         for data in handler.metadata:
-            if not data['sliceUsable'] == 'no':
+            if not data['exclude'] and not data['sliceUsable'] == 'no':
                 try:
                     arg_string = create_arg_string(data, id_list, args)
                 except KeyError:
