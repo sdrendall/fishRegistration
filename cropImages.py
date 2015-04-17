@@ -65,8 +65,6 @@ def create_arg_string(metadata_dict, ids, region_name, args):
                                region_name, ';'.join(imap(str, ex_ids)) if ex_ids is not None else '',
                                ",'flip'" if args.flip else '', ",'flop'" if args.flop else '')
 
-    print arg_string
-
     if args.useBatch:
         return 'bsub -q short -W 0:30 ' + arg_string
     else:
