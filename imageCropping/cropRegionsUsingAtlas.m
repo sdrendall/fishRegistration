@@ -12,6 +12,8 @@ function cropRegionsUsingAtlas(vsiPath, labelsPath, hemispherePath, ids, varargi
 	%               be cropped from.  Defaults to 'both'
 	% 'exclusions' - N x 2 array, Designates N regions that should be excluded from crop operations.
 	%               First column corresponds to the region id, 2nd column corresponds to the hemisphere id
+	% 'flip' - Corrects vertically flipped .vsi files
+	% 'flop' - Corrects horizontally flipped .vsi files
 
 
 	%% Parse input
@@ -29,6 +31,7 @@ function cropRegionsUsingAtlas(vsiPath, labelsPath, hemispherePath, ids, varargi
 		%% Only continue if there are actually pixels to crop
 		if any(mask(:))
 			planes = unpackvsi(fullfile(args.exp_path, vsiPath), args);
+			planes = permutePlanes(planes, args);
 
 			fullSizeMask = rescaleMask(mask, planes{1}); % Resize the mask to the size of a plane
 			regionProperties = regionprops(fullSizeMask, 'BoundingBox', 'Image');
@@ -54,7 +57,9 @@ function args = parseVarargin(argv, argc)
 		'out_path', '', ...
 		'region_name', '', ...
 		'hemisphere', 'both', ...
-		'exclusions', []);
+		'exclusions', []), ...
+		'flip', false, ...
+		'flop', false);
 
 	i = 1;
 	while i <= argc
@@ -80,12 +85,34 @@ function args = parseVarargin(argv, argc)
 		case 'exclusions'
 		    args.exclusions = argv{i + 1};
 		    i = i + 2;
+		case 'flip'
+			args.flip = true;
+			i = i + 1;
+		case 'flop'
+			args.flop = true;
+			i = i + 1;
 		otherwise
 		    disp('Argument unrecognized')
 		    disp(argv{i})
 		    i = i + 1;
 		end
 	end
+
+
+function planes = permutePlanes(planes, args)
+	for i = 1:length(planes)
+		planes{i} = permuteImage(planes{i}, args);
+	end
+
+
+function im = permuteImage(im, args)
+    if args.flip && args.flop
+        im = flipflop(im);
+    elseif args.flip
+        im = flip(im);
+    elseif args.flop
+        im = flip(im, 2);
+    end
 
 
 function mask = rescaleMask(mask, section) 

@@ -4,7 +4,7 @@ __author__ = 'Sam Rendall'
 import argparse
 import os
 import subprocess
-from itertools import imap
+from itertools import imap, izip
 from pythonMods import outputProcessing, jsonTools
 
 
@@ -15,7 +15,7 @@ def generate_parser():
                         help='Specifies the root directory containing the data to be processed.  '
                              'Defaults to the current directory.')
     parser.add_argument('-o', '--outputPath', help='The location to save the output to.', default=None)
-    parser.add_argument('-r', '--regions', nargs=1,
+    parser.add_argument('-r', '--regions', nargs='+',
                         help="A list of names or acronyms denoting the regions to be cropped. "
                              "Hint: Region names containing spaces should be wrapped in apostrophes 'like' 'this'")
     parser.add_argument('-s', '--splitChannels', action='store_const', const=1, default=0,
@@ -33,6 +33,11 @@ def generate_parser():
     parser.add_argument('-m', '--hemisphere', default='both', choices=set(('left', 'right', 'both')),
                         help='The hemispheres to crop images from.  Must be "left", "right", or "both".'
                              '  Defaults to "both".')
+    parser.add_argument('--flip', default=False, action='store_true',
+                        help='Corrects for .vsi files that have been flipped vertically.')
+    parser.add_argument('--flop', default=False, action='store_true',
+                        help='Corrects for .vsi files that have been flipped horizontally.')
+
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-a', '--useAcronyms', action='store_true', default=False,
@@ -42,13 +47,13 @@ def generate_parser():
     return parser
 
 
-def create_arg_string(metadata_dict, ids, args):
+def create_arg_string(metadata_dict, ids, region_name, args):
     # Constructs an argument string that can be used to call the matlab cropping function with the desired flags.
     arg_string = "matlab -nosplash -nodesktop -r " \
                  "\"cropRegionsUsingAtlas('%s', '%s', '%s', [%s], 'slice order', {sliceOrder}, " \
                  "'split channels', {splitChannels}, 'experiment path', '{experimentPath}', " \
-                 "'output path', '{outputPath}', 'region name', '{regions[0]}', 'hemisphere', '{hemisphere}', " \
-                 "'exclusions', [%s]); exit\""
+                 "'output path', '{outputPath}', 'region name', '%s', 'hemisphere', '{hemisphere}', " \
+                 "'exclusions', [%s] %s %s); exit\""
     arg_string = arg_string.format(**vars(args))  # Unpack the args and insert them into the arg_string
 
     # Values from metadata_dict are formatted to the arg_string next.
@@ -57,7 +62,8 @@ def create_arg_string(metadata_dict, ids, args):
     ex_ids = metadata_dict['regionIdsToExclude']
     arg_string = arg_string % (metadata_dict['vsiPath'], metadata_dict['registeredAtlasLabelsPath'],
                                metadata_dict['registeredHemisphereLabelsPath'], ','.join(imap(str, ids)),
-                               ';'.join(imap(str, ex_ids)) if ex_ids is not None else '')
+                               region_name, ';'.join(imap(str, ex_ids)) if ex_ids is not None else '',
+                               ",'flip'" if args.flip else '', ",'flop'" if args.flop else '')
 
     if args.useBatch:
         return 'bsub -q short -W 0:30 ' + arg_string
@@ -102,13 +108,12 @@ def main():
     handler = jsonTools.MetadataHandler(args.experimentPath)
     handler.load_metadata()
 
-    # TODO: REGION NAMES
     # TODO: Sort out this mess...
-    for id_list in id_list_gen:
+    for id_list, region_name in izip(id_list_gen, args.regions):
         for data in handler.metadata:
             if not data['exclude'] and not data['sliceUsable'] == 'no':
                 try:
-                    arg_string = create_arg_string(data, id_list, args)
+                    arg_string = create_arg_string(data, id_list, region_name, args)
                 except KeyError:
                     print 'Registration was unsuccessful for ' + data['vsiPath'] + ' so it wont be cropped'
                 finally:
