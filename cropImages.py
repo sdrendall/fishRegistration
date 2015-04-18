@@ -119,7 +119,7 @@ def main():
                 finally:
                     open_crop_process(arg_string, args)
             else:
-                print data['vsiPath'] + " was labelled as unusable so it won't be cropped."
+                print data['vsiPath'] + " was labeled as unusable so it won't be cropped."
 
 
 if __name__ == '__main__':
