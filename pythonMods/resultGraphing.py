@@ -135,7 +135,7 @@ class StructureStatisticsGrapher():
                           vertex_fill_color=[0.640625, 0, 0, 0.9],
                           bg_color=(.75, .75, .75, 1),
                           output_size=(1000, 1000),
-                          vcmap=matplotlib.cm.jet,
+                          vcmap=matplotlib.cm.summer,
                           **kwargs):
         """
         Draws the structureGraph as a radial graph to output_path

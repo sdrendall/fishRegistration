@@ -264,5 +264,8 @@ function im = loadRgbVsi(reader, args)
 	im = zeros([nr, nc, 3]);
 
 	for i = 1:np
-		im(:,:,args.slice_order(i)) = mat2gray(bfGetPlane(reader, i));
-	end	
+		im(:,:,args.slice_order(i)) = double(bfGetPlane(reader, i));
+	end
+
+	im(:,:,3) = mat2gray(im(:,:,3));
+	im(:,:,2) = im(:,:,2)*20/2^16;

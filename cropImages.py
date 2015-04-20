@@ -58,11 +58,11 @@ def create_arg_string(metadata_dict, ids, region_name, args):
 
     # Values from metadata_dict are formatted to the arg_string next.
     #  The regionIdsToExclude field is aliased to make this slightly more readable.
-    #
     ex_ids = metadata_dict['regionIdsToExclude']
+    image_identifier = '%s_atlasIndex-%d' % (region_name, metadata_dict['atlasIndex'])
     arg_string = arg_string % (metadata_dict['vsiPath'], metadata_dict['registeredAtlasLabelsPath'],
                                metadata_dict['registeredHemisphereLabelsPath'], ','.join(imap(str, ids)),
-                               region_name, ';'.join(imap(str, ex_ids)) if ex_ids is not None else '',
+                               image_identifier, ';'.join(imap(str, ex_ids)) if ex_ids is not None else '',
                                ",'flip'" if args.flip else '', ",'flop'" if args.flop else '')
 
     if args.useBatch:
