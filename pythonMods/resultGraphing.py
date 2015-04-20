@@ -5,7 +5,7 @@ import json
 import outputProcessing
 import matplotlib
 import numpy as np
-import mhd_utils_2 as mhdTools
+import mhdTools
 import os
 from itertools import imap, izip
 import graph_tool.all as gt
