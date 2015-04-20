@@ -11,18 +11,26 @@ class StructureFinder:
         self.structureData = self._load_structure_data(structure_data_path)
 
     def get_ids_by_acronym(self, acronym):
-        structure = self.search_structure_data_for_attribute('acronym', acronym)
-        if structure is not None:
-            return self.get_ids_from_structure(structure)
-        else:
-            raise StructureNotFoundError('acronym', acronym)
+        return self._get_ids_by_attribute('acronym', acronym)
 
     def get_ids_by_structure_name(self, name):
-        structure = self.search_structure_data_for_attribute('name', name)
+        return self._get_ids_by_attribute('name', name)
+
+    def get_ids_by_id(self, id_no):
+        return self._get_ids_by_attribute('id', id_no)
+
+    def _get_ids_by_attribute(self, attribute, value):
+        """
+        'Template' function for obtaining the set of structure ids that identify a structure by an attribute
+        :param attribute: Attribute to identify structure by
+        :param value: Value of the attribute
+        :return: List of ids corresponding to the ids of the identified structure and all of it's progeny
+        """
+        structure = self.search_structure_data_for_attribute(attribute, value)
         if structure is not None:
             return self.get_ids_from_structure(structure)
         else:
-            raise StructureNotFoundError('name', name)
+            raise StructureNotFoundError(attribute, value)
 
     def search_structure_data_for_attribute(self, attribute, value):
         """
@@ -78,9 +86,21 @@ class StructureFinder:
             yield id_no
 
     @staticmethod
+    def get_structure_property_generator_function(structure_property):
+
+        def structure_property_generator_function(structure):
+            yield structure[structure_property]
+            for property_value in chain(*imap(structure_property_generator_function, structure['children'])):
+                yield property_value
+
+        return structure_property_generator_function
+
+    @staticmethod
     def _load_structure_data(path):
         f = open(path, 'r')
-        return json.load(f)
+        data = json.load(f)
+        f.close()
+        return data
 
 
 class StructureNotFoundError(Exception):

@@ -14,7 +14,7 @@ data_type_key = {
     'met_double': numpy.double}
 
 
-def read_meta_header(filename):
+def load_mhd_header(filename):
     """ Return a dictionary of meta data from meta header file """
     header_file = open(filename, "r")
 
@@ -35,13 +35,12 @@ def read_meta_header(filename):
     return meta_dict
 
 
-def load_raw_data_with_mhd(filename):
-    meta_dict = read_meta_header(filename)
+def load_mhd(filename):
+    meta_dict = load_mhd_header(filename)
     data_dimensions = tuple(imap(int, meta_dict['DimSize'].split()))
 
     image_dir = os.path.dirname(filename)
     data_filepath = os.path.join(image_dir, meta_dict['ElementDataFile'])
-    print data_filepath
     data_type = data_type_key[meta_dict['ElementType'].lower()]
 
     image_data = numpy.fromfile(data_filepath, dtype=data_type)
