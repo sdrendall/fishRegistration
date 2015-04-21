@@ -4,6 +4,7 @@ __author__ = 'Sam Rendall'
 import argparse
 import os
 import subprocess
+from pprint import pprint
 from itertools import imap, izip
 from pythonMods import outputProcessing, jsonTools
 
@@ -111,15 +112,19 @@ def main():
     # TODO: Sort out this mess...
     for id_list, region_name in izip(id_list_gen, args.regions):
         for data in handler.metadata:
-            if not data['exclude'] and not data['sliceUsable'] == 'no':
-                try:
-                    arg_string = create_arg_string(data, id_list, region_name, args)
-                except KeyError:
-                    print 'Registration was unsuccessful for ' + data['vsiPath'] + ' so it wont be cropped'
-                finally:
-                    open_crop_process(arg_string, args)
-            else:
-                print data['vsiPath'] + " was labeled as unusable so it won't be cropped."
+            try:
+                if not data['exclude'] and not data['sliceUsable'] == 'no':
+                    try:
+                        arg_string = create_arg_string(data, id_list, region_name, args)
+                    except KeyError:
+                        print 'Registration was unsuccessful for ' + data['vsiPath'] + ' so it wont be cropped'
+                    finally:
+                        open_crop_process(arg_string, args)
+                else:
+                    print data['vsiPath'] + " was labeled as unusable so it won't be cropped."
+            except KeyError:
+                print 'Skipping image:'
+                pprint(data)
 
 
 if __name__ == '__main__':
