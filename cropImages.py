@@ -4,8 +4,6 @@ __author__ = 'Sam Rendall'
 import argparse
 import os
 import subprocess
-import mhdTools
-import numpy
 from pprint import pprint
 from itertools import imap, izip
 from pythonMods import outputProcessing, jsonTools
@@ -94,36 +92,6 @@ def format_output_path(args):
     return args
 
 
-def contains_regions(data, id_list, args):
-    labels_path = os.path.join(args.experimentPath, data['registeredAtlasLabelsPath'])
-    annotation_image, _ = mhdTools.load_mhd(labels_path)
-    included_labels = list(numpy.unique(annotation_image))
-    if any(id in included_labels for id in id_list):
-        return True
-    else:
-        return False
-
-
-def construct_and_launch_crop_process(data, id_list, region_name, args):
-    """
-    Things were getting out of hand so I made this a function
-    :param data: object from metadata.json containing information about an image
-    :param id_list: list of ids corresponding to the region to crop
-    :param region_name: name of the region to be cropped
-    :param args: args namespace from argparse
-    :return: void
-    """
-    if not data['exclude'] and not data['sliceUsable'] == 'no' and contains_regions(data, id_list, args):
-        try:
-            arg_string = create_arg_string(data, id_list, region_name, args)
-        except KeyError:
-            print 'Registration was unsuccessful for ' + data['vsiPath'] + ' so it wont be cropped'
-        finally:
-            open_crop_process(arg_string, args)
-    else:
-        print data['vsiPath'] + " does not meet the requirements for cropping, so it will be skipped."
-
-
 def main():
     parser = generate_parser()
     args = parser.parse_args()
@@ -145,7 +113,15 @@ def main():
     for id_list, region_name in izip(id_list_gen, args.regions):
         for data in handler.metadata:
             try:
-                construct_and_launch_crop_process(data, id_list, region_name, args)
+                if not data['exclude'] and not data['sliceUsable'] == 'no':
+                    try:
+                        arg_string = create_arg_string(data, id_list, region_name, args)
+                    except KeyError:
+                        print 'Registration was unsuccessful for ' + data['vsiPath'] + ' so it wont be cropped'
+                    finally:
+                        open_crop_process(arg_string, args)
+                else:
+                    print data['vsiPath'] + " was labeled as unusable so it won't be cropped."
             except KeyError:
                 print 'Skipping image:'
                 pprint(data)
