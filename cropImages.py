@@ -4,11 +4,10 @@ __author__ = 'Sam Rendall'
 import argparse
 import os
 import subprocess
-import mhdTools
 import numpy
 from pprint import pprint
 from itertools import imap, izip
-from pythonMods import outputProcessing, jsonTools
+from pythonMods import outputProcessing, jsonTools, mhdTools
 
 
 def generate_parser():
