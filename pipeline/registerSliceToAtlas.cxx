@@ -25,6 +25,9 @@
 #include "itkMattesMutualInformationImageToImageMetricv4.h"
 #include "itkCastImageFilter.h"
 
+// #include "itkGridImageSource.h"
+#include "itkGridForwardWarpImageFilter.h"
+#include "itkTransformToDisplacementFieldFilter.h"
 
 #include "itkPermuteAxesImageFilter.h"
 
@@ -77,14 +80,14 @@ void apply_transform_to_atlas(RigidTransformType::Pointer rigid_transform,
         const char * output_path, const char * atlas_path, int slice_index) {
 
     typedef itk::Image<ATLAS_PIXEL_TYPE, 2> AtlasSliceType;
-    typedef itk::ResampleImageFilter<AtlasSliceType, AtlasSliceType> AnnotationImageResamplerType;
-    typedef itk::ImageFileWriter<AtlasSliceType> AnnotationImageWriterType;
+    typedef itk::ResampleImageFilter<AtlasSliceType, AtlasSliceType> ImageResamplerType;
+    typedef itk::ImageFileWriter<AtlasSliceType> ImageWriterType;
 
     typename AtlasSliceType::Pointer atlas_slice = get_atlas_slice<ATLAS_PIXEL_TYPE>(slice_index, atlas_path);
     atlas_slice->SetDirection(input_image->GetDirection());
 
     // Apply the computed rigid transform to the atlas slice
-    typename AnnotationImageResamplerType::Pointer rigid_resampler = AnnotationImageResamplerType::New();
+    typename ImageResamplerType::Pointer rigid_resampler = ImageResamplerType::New();
     rigid_resampler->SetTransform(rigid_transform);
     rigid_resampler->SetInput(atlas_slice);
 
@@ -94,7 +97,7 @@ void apply_transform_to_atlas(RigidTransformType::Pointer rigid_transform,
     rigid_resampler->SetOutputDirection(input_image->GetDirection());
     rigid_resampler->SetDefaultPixelValue(0);
 
-    typename AnnotationImageResamplerType::Pointer deformable_resampler = AnnotationImageResamplerType::New();
+    typename ImageResamplerType::Pointer deformable_resampler = ImageResamplerType::New();
     deformable_resampler->SetTransform(deformable_transform);
     deformable_resampler->SetInput(rigid_resampler->GetOutput());
 
@@ -110,7 +113,7 @@ void apply_transform_to_atlas(RigidTransformType::Pointer rigid_transform,
     deformable_resampler->SetInterpolator(interpolator);
 
     // Write the registered reference image to the specified filepath
-    typename AnnotationImageWriterType::Pointer output_writer = AnnotationImageWriterType::New();
+    typename ImageWriterType::Pointer output_writer = ImageWriterType::New();
     output_writer->SetFileName(output_path);
     output_writer->SetInput(deformable_resampler->GetOutput());
     output_writer->Update();
@@ -189,6 +192,51 @@ IMAGE_POINTER_TYPE rotateImage(IMAGE_POINTER_TYPE input_image) {
     IMAGE_POINTER_TYPE output_image = permute_image_filter->GetOutput();
     return output_image;
 }
+
+
+template<typename TRANSFORM_TYPE, typename IMAGE_TYPE>
+int saveTransformAsDisplacementGrid(const char * save_path, TRANSFORM_TYPE transform, IMAGE_TYPE reference_image) {
+    // Display or save the displacement field here
+    // Create a displacement field based on the transform
+    typedef itk::Vector<double, 2> DisplacementVectorType;
+    typedef itk::Image<DisplacementVectorType, 2> DisplacementFieldType;
+    typedef itk::TransformToDisplacementFieldFilter<DisplacementFieldType, double> DisplacementFieldGeneratorType;
+
+    DisplacementFieldGeneratorType::Pointer displacement_field_generator = DisplacementFieldGeneratorType::New();
+    displacement_field_generator->UseReferenceImageOn();
+    displacement_field_generator->SetReferenceImage(reference_image);
+    displacement_field_generator->SetTransform(transform);
+
+    try {
+        displacement_field_generator->Update();
+    } catch ( itk::ExceptionObject & err ) {
+        std::cout << "Could not generate deformation field from the given transform!" << std::endl;
+        std::cout << "A displacement field grid will not be saved at " << save_path << std::endl;
+        std::cout << err << std::endl;
+        return 1;
+    }
+
+    typedef itk::GridForwardWarpImageFilter<DisplacementFieldType, EightBitImageType> GridFilterType;
+    typename GridFilterType::Pointer grid_warper = GridFilterType::New();
+    grid_warper->SetInput(displacement_field_generator->GetOutput());
+    grid_warper->SetForegroundValue(itk::NumericTraits<unsigned char>::max());  // Foreground should be the maximum value for pixels in the grid image, which are uchars
+
+    typedef itk::ImageFileWriter<EightBitImageType> GridImageWriterType;
+    GridImageWriterType::Pointer grid_writer = GridImageWriterType::New();
+    grid_writer->SetInput(grid_warper->GetOutput());
+    grid_writer->SetFileName(save_path);
+
+    try {
+        grid_writer->Update();
+    } catch (itk::ExceptionObject & err) {
+        std::cout << "Failed to save deformation grid to " << save_path << std::endl;
+        std::cout << err << std::endl;
+        return 1;
+    }
+
+    return 0;
+}
+
 
 // Observer class, to output the progress of the registration
 // This was copied directly from a rigid registration example, without modification
@@ -333,6 +381,8 @@ int main(int argc, char *argv[]){
 
     RigidTransformType::Pointer rigid_transform = compute_affine_transform(input_image, atlas_slice);
     
+    saveTransformAsDisplacementGrid("/home/sam/Desktop/rigid_displacement_grid.png", rigid_transform, input_image);
+
     // Apply the computed rigid transform to the atlas slice
     ResampleFilterType::Pointer rigidResampler = ResampleFilterType::New();
     rigidResampler->SetTransform(rigid_transform);
@@ -346,6 +396,8 @@ int main(int argc, char *argv[]){
 
     // Compute the Bspline transform mapping the atlas slice to the input image
     BSplineTransformType::Pointer deformable_transform = compute_bSpline_transform(rigidResampler->GetOutput(), input_image, registration_log_path); // (movingImage, fixedImage, logPath)
+
+    saveTransformAsDisplacementGrid("/home/sam/Desktop/deformable_displacement_grid.png", deformable_transform, input_image);
 
     // Apply the computed transforms to the corresponding reference and annotation images, and save the results
     // applyAtlas(rigid_transform, deformable_transform, interpolator, input_image, outputName, atlasPath, slice_index)
@@ -478,11 +530,13 @@ RigidTransformType::Pointer compute_affine_transform(ImageType::Pointer inputIma
     OptimizerType::ParametersType registrationParameters = registration->GetLastTransformParameters();
     display_registration_results(registrationParameters, optimizer->GetCurrentIteration(), optimizer->GetValue());
 
-    // return the transform computed by the registration
-    RigidTransformType::Pointer registrationTransform = RigidTransformType::New();
-    registrationTransform->SetParameters(registrationParameters);
-    registrationTransform->SetFixedParameters(transform->GetFixedParameters());
-    return registrationTransform;
+    // // return the transform computed by the registration
+    // RigidTransformType::Pointer registrationTransform = RigidTransformType::New();
+    // registrationTransform->SetParameters(registrationParameters);
+    // registrationTransform->SetFixedParameters(transform->GetFixedParameters());
+    transform->SetParameters(registration->GetLastTransformParameters());
+
+    return transform;
 }
 
 
@@ -515,7 +569,7 @@ BSplineTransformType::Pointer compute_bSpline_transform(ImageType::Pointer movin
     BSplineTransformType::MeshSizeType meshSize;
     BSplineTransformType::OriginType fixedOrigin = fixedImage->GetOrigin();
     ImageType::SizeType fixedImageSize = fixedImage->GetLargestPossibleRegion().GetSize();
-    unsigned int numberOfGridNodesInOneDimension = 8;
+    unsigned int numberOfGridNodesInOneDimension = 5;
 
     for (int i = 0; i < 2; i++) {
         fixedPhysicalDimensions[i] = (fixedImageSize[i] - 1) * fixedImage->GetSpacing()[i];
