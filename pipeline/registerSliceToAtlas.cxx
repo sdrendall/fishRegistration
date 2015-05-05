@@ -17,6 +17,7 @@
 #include "itkResampleImageFilter.h"
 #include "itkNearestNeighborInterpolateImageFunction.h"
 #include "itkBSplineInterpolateImageFunction.h"
+#include "itkLinearInterpolateImageFunction.h"
 
 #include "itkBSplineTransform.h"
 #include "itkNormalizedCorrelationImageToImageMetric.h"
@@ -118,6 +119,9 @@ void apply_transform_to_atlas(RigidTransformType::Pointer rigid_transform,
     output_writer->SetInput(deformable_resampler->GetOutput());
     output_writer->Update();
 }
+
+
+// template<typename ATLAS_PIXEL_TYPE, typename INTERPOLATOR_TYPE>
 
 
 template<typename ATLAS_PIXEL_TYPE>
@@ -432,9 +436,9 @@ int main(int argc, char *argv[]){
                                                                               atlas_hemispheres_path,
                                                                               slice_index);
 
-    typedef unsigned int AnnotationPixelType;
+    typedef double AnnotationPixelType;
     typedef itk::Image<AnnotationPixelType, 2> AnnotationImageType;
-    typedef itk::NearestNeighborInterpolateImageFunction<AnnotationImageType, double> AnnotationInterpolatorType;
+    typedef itk::LinearInterpolateImageFunction<AnnotationImageType, double> AnnotationInterpolatorType;
     AnnotationInterpolatorType::Pointer annotation_interpolator = AnnotationInterpolatorType::New();
 
     // Apply transforms to the annotated atlas images
