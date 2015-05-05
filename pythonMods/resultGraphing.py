@@ -184,9 +184,44 @@ def test_structure_graph():
                               vertex_fill_color=color_property)
 
 
+def get_absent_regions_filter_dict(stats_map):
+    annotation_atlas, _ = mhdTools.load_mhd('/home/sam/code/fishRegistration/atlasVolume/annotation.mhd')
+    annotation_inclusion_list = list(np.unique(annotation_atlas))
+    stats_map._accumulate_ids(annotation_inclusion_list, stats_map.structureData)
+
+    filter_dict = dict()
+    id_gen_fcn = stats_map.get_structure_property_generator_function('id')
+    for id_no in id_gen_fcn(stats_map.structureData):
+        # id is included if True
+        filter_dict[id_no] = id_no in annotation_inclusion_list
+
+    print all(list(filter_dict.values()))
+    print any(list(filter_dict.values()))
+
+    return filter_dict
+
+
+def get_filtered_structure_data(filter_map, structure_data):
+    filtered_data = structure_data.copy()
+    filtered_data['children'] = get_filtered_children(filter_map, structure_data['children'])
+    return filtered_data
+
+
+def get_filtered_children(filter_map, children):
+    filtered_children = list()
+    for child in children:
+        if filter_map[child['id']]:
+            filtered_children.append(get_filtered_structure_data(filter_map, child))
+        else:
+            print child['name']
+
+    return filtered_children
+
+
 def create_figures():
     metadata_path = '/home/sam/Desktop/imagesForJin_modifiedAtlas/metadata.json'
-    structure_data_path = '/home/sam/code/fishRegistration/structureData.json'
+    # structure_data_path = '/home/sam/code/fishRegistration/structureData.json'
+    structure_data_path = '/home/sam/code/fishRegistration/structureData_filtered.json'
     stats_map = StructureStatisticsMap(structure_data_path, metadata_path)
 
     # The stats map is also a structure finder, this is probably bad practice but I'm feeling very lazy...
@@ -194,7 +229,7 @@ def create_figures():
     id_gen_fcn = stats_map.get_structure_property_generator_function('id')
 
     # Some different nodes that we are interested in
-    root_node = stats_map.structureData # full data set
+    root_node = stats_map.structureData  # full data set
     isocortex_node = stats_map.search_structure_data_for_attribute('name', 'Isocortex')
     AUD_node = stats_map.search_structure_data_for_attribute('acronym', 'AUD')
     TEa_node = stats_map.search_structure_data_for_attribute('acronym', 'TEa')
@@ -204,8 +239,13 @@ def create_figures():
     # Cortical Subplate contains amygdala, Claustrum and LA
     CTXsp_node = stats_map.search_structure_data_for_attribute('acronym', 'CTXsp')
 
+    # Filter dict to filter nodes that don't appear in the brain atlas
+    filter_map = get_absent_regions_filter_dict(stats_map)
+    filtered_node = get_filtered_structure_data(filter_map, stats_map.structureData)
+
     # Colormap based on 1 - pInclude
     colormap = generate_colormap(stats_map.pIncludeMap)
+    edgecolor = generate_edge_cm(stats_map.occurrenceMap)
 
     # mapping of id_no : acronyms for every structure
     acronym_map = {id_no: acr for acr, id_no in izip(acr_gen_fcn(root_node), id_gen_fcn(root_node))}
@@ -213,24 +253,41 @@ def create_figures():
 
     # Graph for the full data set
     full_graph = StructureStatisticsGrapher(root_node)
+    ecm_property = full_graph.add_property_with_id_map(edgecolor, 'double')
     cm_property = full_graph.add_property_with_id_map(colormap, 'double')
     acr_property = full_graph.add_property_with_id_map(acronym_map, 'string')
     full_graph.draw_radial_graph('/home/sam/Desktop/full_graph.png',
                                  output_size=(4500, 4500),
                                  vertex_text=acr_property,
+                                 vertex_color=ecm_property,
                                  vertex_fill_color=cm_property)
+
+
+    ## Filtered data set
+    #filtered_graph = StructureStatisticsGrapher(filtered_node)
+    #ecm_property = filtered_graph.add_property_with_id_map(edgecolor, 'double')
+    #cm_property = filtered_graph.add_property_with_id_map(colormap, 'double')
+    #acr_property = filtered_graph.add_property_with_id_map(acronym_map, 'string')
+    #filtered_graph.draw_radial_graph('/home/sam/Desktop/filtered_graph.png',
+    #                                 output_size=(4500, 4500),
+    #                                 vertex_text=acr_property,
+    #                                 vertex_color=ecm_property,
+    #                                 vertex_fill_color=cm_property)
 
     # Graph for the Isocortex
     iso_graph = StructureStatisticsGrapher(isocortex_node)
+    ecm_property = iso_graph.add_property_with_id_map(edgecolor, 'double')
     cm_property = iso_graph.add_property_with_id_map(colormap, 'double')
     acr_property = iso_graph.add_property_with_id_map(acronym_map, 'string')
     iso_graph.draw_radial_graph('/home/sam/Desktop/iso_graph.png',
                                 output_size=(4000, 4000),
                                 vertex_text=acr_property,
+                                vertex_color=ecm_property,
                                 vertex_fill_color=cm_property)
 
     # Graph for the Auditory Cortex
     ACtx_graph = StructureStatisticsGrapher()
+    ecm_property = ACtx_graph.add_property_with_id_map(edgecolor, 'double')
     v0 = ACtx_graph.structureGraph.add_vertex()
     for node in (AUD_node, TEa_node, ECT_node, PERI_node):
         new_vertex = ACtx_graph.add_with_children(node)
@@ -238,21 +295,24 @@ def create_figures():
     cm_property = ACtx_graph.add_property_with_id_map(colormap, 'double')
     acr_property = ACtx_graph.add_property_with_id_map(acronym_map, 'string')
     ACtx_graph.draw_radial_graph('/home/sam/Desktop/auditory_cortex_graph.png',
-                                output_size=(2000, 2000),
-                                vertex_font_size=24,
-                                vertex_text=acr_property,
-                                vertex_fill_color=cm_property,
-                                vertex_size=50)
+                                 output_size=(2000, 2000),
+                                 vertex_font_size=24,
+                                 vertex_text=acr_property,
+                                 vertex_color=ecm_property,
+                                 vertex_fill_color=cm_property,
+                                 vertex_size=50)
 
     # Graph for the Cortical Subplate
     ctxsp_graph = StructureStatisticsGrapher(CTXsp_node)
+    ecm_property = ctxsp_graph.add_property_with_id_map(edgecolor, 'double')
     cm_property = ctxsp_graph.add_property_with_id_map(colormap, 'double')
     acr_property = ctxsp_graph.add_property_with_id_map(acronym_map, 'string')
     ctxsp_graph.draw_radial_graph('/home/sam/Desktop/cortical_subplate_graph.png',
-                                 output_size=(1750, 1750),
-                                 vertex_text=acr_property,
-                                 vertex_fill_color=cm_property,
-                                 vertex_font_size=36)
+                                  output_size=(1750, 1750),
+                                  vertex_text=acr_property,
+                                  vertex_color=ecm_property,
+                                  vertex_fill_color=cm_property,
+                                  vertex_font_size=36)
 
 
 def generate_colormap(p_map):
@@ -261,6 +321,10 @@ def generate_colormap(p_map):
         colormap[id_no] = 1 - p
 
     return colormap
+
+
+def generate_edge_cm(o_map):
+    return {id_no: num_occur < 5 for id_no, num_occur in o_map.iteritems()}
 
 
 def main():

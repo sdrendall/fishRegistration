@@ -1,12 +1,12 @@
 #!/bin/bash
 
 inputPath='testInput.mhd'
-sliceIndex='191.0'
-refOutPath='testRefOut.tiff'
+sliceIndex='365.0'
+refOutPath='testRefOut.mhd'
 annoOutPath='testAnnoOut.mhd'
-hemiOutPath='testHemiOut.tiff'
+hemiOutPath='testHemiOut.mhd'
 logPath='testLogOut.txt'
-atlasBase='/home/sam/Dropbox/grayLab/allenReferenceAtlas_mouseCoronal/atlasVolume'
+atlasBase='/home/sam/code/fishRegistration/atlasVolume'
 refAtlasPath="$atlasBase/atlasVolume.mhd"
 refAnnoPath="$atlasBase/annotation.mhd"
 refHemiPath="$atlasBase/hemisphereMask.mhd"
