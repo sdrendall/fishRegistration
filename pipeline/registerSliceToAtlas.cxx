@@ -121,7 +121,58 @@ void apply_transform_to_atlas(RigidTransformType::Pointer rigid_transform,
 }
 
 
-// template<typename ATLAS_PIXEL_TYPE, typename INTERPOLATOR_TYPE>
+template<typename ATLAS_PIXEL_TYPE, typename INTERPOLATOR_TYPE>
+void warp_atlas_with_transform(
+    RigidTransformType::Pointer rigid_transform, 
+    BSplineTransformType::Pointer deformable_transform,
+    INTERPOLATOR_TYPE interpolator,
+    ImageType::Pointer input_image, 
+    const char * output_path,
+    const char * atlas_path,
+    int slice_index
+) {
+                          
+    typedef itk::Image<ATLAS_PIXEL_TYPE, 2> AtlasSliceType;
+    typedef itk::ResampleImageFilter<AtlasSliceType, AtlasSliceType> ImageResamplerType;
+    typedef itk::ImageFileWriter<AtlasSliceType> ImageWriterType;
+
+    typename AtlasSliceType::Pointer atlas_slice = get_atlas_slice<ATLAS_PIXEL_TYPE>(slice_index, atlas_path);
+    atlas_slice->SetDirection(input_image->GetDirection());
+
+    // Apply the computed rigid transform to the atlas slice
+    typename ImageResamplerType::Pointer rigid_resampler = ImageResamplerType::New();
+    rigid_resampler->SetTransform(rigid_transform);
+    rigid_resampler->SetInput(atlas_slice);
+
+    rigid_resampler->SetSize(input_image->GetLargestPossibleRegion().GetSize());
+    rigid_resampler->SetOutputOrigin(input_image->GetOrigin());
+    rigid_resampler->SetOutputSpacing(input_image->GetSpacing());
+    rigid_resampler->SetOutputDirection(input_image->GetDirection());
+    rigid_resampler->SetDefaultPixelValue(0);
+
+    // Image Warping
+    typedef itk::Vector<double, 2> DisplacementVectorType;
+    typedef itk::Image<DisplacementVectorType, 2> DisplacementFieldType;
+
+    typedef itk::TransformToDisplacementFieldFilter<DisplacementFieldType, 2> DisplacementFieldGeneratorType
+    DisplacementFieldGeneratorType::Pointer displacement_field_generator = DisplacementFieldGeneratorType::New();
+    displacement_field_generator->UseReferenceImageOn();
+    displacement_field_generator->SetReferenceImage(inputImage);
+    displacement_field_generator->SetTransform(deformable_transform);
+
+    typedef itk::WarpImageFilter<AtlasSliceType, AtlasSliceType, DisplacementFieldType> WarpImageFilterType;
+    WarpImageFilterType::Pointer warp_filter = WarpImageFilterType::New();
+    warp_filter->SetInterpolator(interpolator);
+    warp_filter->SetInput(rigid_resampler->GetOutput());
+    warp_filter->SetDisplacementField(displacement_field_generator->GetOutput());
+
+    itk::ImageFileWriter<AtlasSliceType> SliceWriterType;
+    SliceWriterType::Pointer slice_writer = SliceWriterType::New();
+    slice_writer->SetInput(warp_filter->GetOutput());
+    slice_writer->SetFileName(output_path);
+    slice_writer->Update();
+}
+
 
 
 template<typename ATLAS_PIXEL_TYPE>
@@ -415,7 +466,7 @@ int main(int argc, char *argv[]){
 
     // Apply transforms to the atlas reference image
     apply_transform_to_atlas<ReferencePixelType, ReferenceInterpolatorType::Pointer>(rigid_transform,
-                                                                            deformable_transform, 
+                                                                            deformable_transform,
                                                                             reference_interpolator,
                                                                             input_image,
                                                                             reference_image_output_path,
@@ -442,7 +493,7 @@ int main(int argc, char *argv[]){
     AnnotationInterpolatorType::Pointer annotation_interpolator = AnnotationInterpolatorType::New();
 
     // Apply transforms to the annotated atlas images
-    apply_transform_to_atlas<AnnotationPixelType, AnnotationInterpolatorType::Pointer>(rigid_transform, 
+    warp_atlas_with_transform<AnnotationPixelType, AnnotationInterpolatorType::Pointer>(rigid_transform, 
                                                                               deformable_transform,
                                                                               annotation_interpolator,
                                                                               input_image,
