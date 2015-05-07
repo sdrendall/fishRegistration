@@ -26,7 +26,6 @@
 #include "itkMattesMutualInformationImageToImageMetricv4.h"
 #include "itkCastImageFilter.h"
 
-// #include "itkGridImageSource.h"
 #include "itkGridForwardWarpImageFilter.h"
 #include "itkTransformToDisplacementFieldFilter.h"
 
@@ -53,7 +52,6 @@ typedef itk::CastImageFilter<ImageType, EightBitImageType> InternalToEightBitCas
 RigidTransformType::Pointer compute_affine_transform(ImageType::Pointer, ImageType::Pointer);
 BSplineTransformType::Pointer compute_bSpline_transform(ImageType::Pointer, ImageType::Pointer, const char *);
 
-void write_image(ImageType::Pointer, const char *);
 void display_registration_results(itk::OptimizerParameters<double>, const unsigned int, const double);
 void debug_out(const char *);
 
@@ -68,17 +66,23 @@ void apply_transform_to_atlas(RigidTransformType::Pointer rigid_transform,
                               const char * atlas_path, 
                               int slice_index);
 
+
 template<typename ATLAS_PIXEL_TYPE>
 typename itk::Image<ATLAS_PIXEL_TYPE, 2>::Pointer get_atlas_slice(int slice_index, const char * atlas_path);
 
-template<typename IMAGE_POINTER_TYPE>
-IMAGE_POINTER_TYPE rotateImage(IMAGE_POINTER_TYPE input_image);
+template<typename TRANSFORM_TYPE, typename IMAGE_TYPE>
+int saveTransformAsDisplacementGrid(TRANSFORM_TYPE transform, IMAGE_TYPE reference_image, const char * save_path);
 
 
+// Applys a rigid_transform and a deformable_transform to the atlas at atlas path
 template<typename ATLAS_PIXEL_TYPE, typename INTERPOLATOR_TYPE>
 void apply_transform_to_atlas(RigidTransformType::Pointer rigid_transform, 
-        BSplineTransformType::Pointer deformable_transform, INTERPOLATOR_TYPE interpolator, ImageType::Pointer input_image, 
-        const char * output_path, const char * atlas_path, int slice_index) {
+                              BSplineTransformType::Pointer deformable_transform, 
+                              INTERPOLATOR_TYPE interpolator, 
+                              ImageType::Pointer input_image, 
+                              const char * output_path, 
+                              const char * atlas_path, 
+                              int slice_index) {
 
     typedef itk::Image<ATLAS_PIXEL_TYPE, 2> AtlasSliceType;
     typedef itk::ResampleImageFilter<AtlasSliceType, AtlasSliceType> ImageResamplerType;
@@ -121,60 +125,7 @@ void apply_transform_to_atlas(RigidTransformType::Pointer rigid_transform,
 }
 
 
-template<typename ATLAS_PIXEL_TYPE, typename INTERPOLATOR_TYPE>
-void warp_atlas_with_transform(
-    RigidTransformType::Pointer rigid_transform, 
-    BSplineTransformType::Pointer deformable_transform,
-    INTERPOLATOR_TYPE interpolator,
-    ImageType::Pointer input_image, 
-    const char * output_path,
-    const char * atlas_path,
-    int slice_index
-) {
-                          
-    typedef itk::Image<ATLAS_PIXEL_TYPE, 2> AtlasSliceType;
-    typedef itk::ResampleImageFilter<AtlasSliceType, AtlasSliceType> ImageResamplerType;
-    typedef itk::ImageFileWriter<AtlasSliceType> ImageWriterType;
-
-    typename AtlasSliceType::Pointer atlas_slice = get_atlas_slice<ATLAS_PIXEL_TYPE>(slice_index, atlas_path);
-    atlas_slice->SetDirection(input_image->GetDirection());
-
-    // Apply the computed rigid transform to the atlas slice
-    typename ImageResamplerType::Pointer rigid_resampler = ImageResamplerType::New();
-    rigid_resampler->SetTransform(rigid_transform);
-    rigid_resampler->SetInput(atlas_slice);
-
-    rigid_resampler->SetSize(input_image->GetLargestPossibleRegion().GetSize());
-    rigid_resampler->SetOutputOrigin(input_image->GetOrigin());
-    rigid_resampler->SetOutputSpacing(input_image->GetSpacing());
-    rigid_resampler->SetOutputDirection(input_image->GetDirection());
-    rigid_resampler->SetDefaultPixelValue(0);
-
-    // Image Warping
-    typedef itk::Vector<double, 2> DisplacementVectorType;
-    typedef itk::Image<DisplacementVectorType, 2> DisplacementFieldType;
-
-    typedef itk::TransformToDisplacementFieldFilter<DisplacementFieldType, 2> DisplacementFieldGeneratorType
-    DisplacementFieldGeneratorType::Pointer displacement_field_generator = DisplacementFieldGeneratorType::New();
-    displacement_field_generator->UseReferenceImageOn();
-    displacement_field_generator->SetReferenceImage(inputImage);
-    displacement_field_generator->SetTransform(deformable_transform);
-
-    typedef itk::WarpImageFilter<AtlasSliceType, AtlasSliceType, DisplacementFieldType> WarpImageFilterType;
-    WarpImageFilterType::Pointer warp_filter = WarpImageFilterType::New();
-    warp_filter->SetInterpolator(interpolator);
-    warp_filter->SetInput(rigid_resampler->GetOutput());
-    warp_filter->SetDisplacementField(displacement_field_generator->GetOutput());
-
-    itk::ImageFileWriter<AtlasSliceType> SliceWriterType;
-    SliceWriterType::Pointer slice_writer = SliceWriterType::New();
-    slice_writer->SetInput(warp_filter->GetOutput());
-    slice_writer->SetFileName(output_path);
-    slice_writer->Update();
-}
-
-
-
+// Extracts a coronal slice from the atlas at atlas_path
 template<typename ATLAS_PIXEL_TYPE>
 typename itk::Image<ATLAS_PIXEL_TYPE, 2>::Pointer get_atlas_slice(int slice_index, const char * atlas_path) {
     // Declare 3D and 2D image types
@@ -221,36 +172,13 @@ typename itk::Image<ATLAS_PIXEL_TYPE, 2>::Pointer get_atlas_slice(int slice_inde
     extraction_filter->SetExtractionRegion(sliceRegion);
     extraction_filter->Update();
     typename SliceImageType::Pointer atlas_slice = extraction_filter->GetOutput();
-    //atlas_slice = rotateImage(atlas_slice);
     return atlas_slice;
 }
 
 
-template<typename IMAGE_POINTER_TYPE>
-IMAGE_POINTER_TYPE rotateImage(IMAGE_POINTER_TYPE input_image) {
-    typedef itk::PermuteAxesImageFilter<IMAGE_POINTER_TYPE> PermuteAxesFilterType;
-
-    // Create a permutation filter
-    typename PermuteAxesFilterType::Pointer permute_image_filter = PermuteAxesFilterType::New();
-
-    // Define the axes permutation order
-    itk::FixedArray<unsigned int, 2> order;
-    order[0] = 1;
-    order[1] = 0;
-    
-    // Permute the axes
-    permute_image_filter->SetInput(input_image);
-    permute_image_filter->SetOrder(order);
-    permute_image_filter->Update();
-
-    // Return the permuted image
-    IMAGE_POINTER_TYPE output_image = permute_image_filter->GetOutput();
-    return output_image;
-}
-
-
+// Warps a regular grid with the given transform.  Useful for visualizing the effects of registration
 template<typename TRANSFORM_TYPE, typename IMAGE_TYPE>
-int saveTransformAsDisplacementGrid(const char * save_path, TRANSFORM_TYPE transform, IMAGE_TYPE reference_image) {
+int saveTransformAsDisplacementGrid(TRANSFORM_TYPE transform, IMAGE_TYPE reference_image, const char * save_path) {
     // Display or save the displacement field here
     // Create a displacement field based on the transform
     typedef itk::Vector<double, 2> DisplacementVectorType;
@@ -290,6 +218,19 @@ int saveTransformAsDisplacementGrid(const char * save_path, TRANSFORM_TYPE trans
     }
 
     return 0;
+}
+
+
+// Template for quickly writing an image to disk, useful for debugging
+template<typename PIXEL_TYPE>
+void write_image(typename itk::Image<PIXEL_TYPE, 2>::Pointer im, const char * path) {
+    typedef itk::Image<PIXEL_TYPE, 2> InternalImageType;
+    typedef itk::ImageFileWriter<InternalImageType> WriterType;
+
+    typename WriterType::Pointer fileWriter = WriterType::New();
+    fileWriter->SetFileName(path);
+    fileWriter->SetInput(im);
+    fileWriter->Update();
 }
 
 
@@ -418,7 +359,7 @@ int main(int argc, char *argv[]){
 
 
     // Get corresponding atlas reference slice
-    int slice_index = atoi(argv[2]);
+    int slice_index = atoi(argv[2]) - 1;  // Inicies are assigned on a one based system
     ImageType::Pointer atlas_slice = get_atlas_slice<ImagePixelType>(slice_index, atlas_reference_path);
     
     // Load the input image
@@ -436,23 +377,20 @@ int main(int argc, char *argv[]){
 
     RigidTransformType::Pointer rigid_transform = compute_affine_transform(input_image, atlas_slice);
     
-    saveTransformAsDisplacementGrid("/home/sam/Desktop/rigid_displacement_grid.png", rigid_transform, input_image);
-
     // Apply the computed rigid transform to the atlas slice
-    ResampleFilterType::Pointer rigidResampler = ResampleFilterType::New();
-    rigidResampler->SetTransform(rigid_transform);
-    rigidResampler->SetInput(atlas_slice);
+    ResampleFilterType::Pointer rigid_resampler = ResampleFilterType::New();
+    rigid_resampler->SetTransform(rigid_transform);
+    rigid_resampler->SetInput(atlas_slice);
 
-    rigidResampler->SetSize(input_image->GetLargestPossibleRegion().GetSize());
-    rigidResampler->SetOutputOrigin(input_image->GetOrigin());
-    rigidResampler->SetOutputSpacing(input_image->GetSpacing());
-    rigidResampler->SetOutputDirection(input_image->GetDirection());
-    rigidResampler->SetDefaultPixelValue(0);
+    rigid_resampler->SetSize(input_image->GetLargestPossibleRegion().GetSize());
+    rigid_resampler->SetOutputOrigin(input_image->GetOrigin());
+    rigid_resampler->SetOutputSpacing(input_image->GetSpacing());
+    rigid_resampler->SetOutputDirection(input_image->GetDirection());
+    rigid_resampler->SetDefaultPixelValue(0);
+    rigid_resampler->Update();
 
     // Compute the Bspline transform mapping the atlas slice to the input image
-    BSplineTransformType::Pointer deformable_transform = compute_bSpline_transform(rigidResampler->GetOutput(), input_image, registration_log_path); // (movingImage, fixedImage, logPath)
-
-    saveTransformAsDisplacementGrid("/home/sam/Desktop/deformable_displacement_grid.png", deformable_transform, input_image);
+    BSplineTransformType::Pointer deformable_transform = compute_bSpline_transform(rigid_resampler->GetOutput(), input_image, registration_log_path); // (movingImage, fixedImage, logPath)
 
     // Apply the computed transforms to the corresponding reference and annotation images, and save the results
     // applyAtlas(rigid_transform, deformable_transform, interpolator, input_image, outputName, atlasPath, slice_index)
@@ -489,17 +427,18 @@ int main(int argc, char *argv[]){
 
     typedef double AnnotationPixelType;
     typedef itk::Image<AnnotationPixelType, 2> AnnotationImageType;
-    typedef itk::LinearInterpolateImageFunction<AnnotationImageType, double> AnnotationInterpolatorType;
+    typedef itk::NearestNeighborInterpolateImageFunction<AnnotationImageType, double> AnnotationInterpolatorType;
     AnnotationInterpolatorType::Pointer annotation_interpolator = AnnotationInterpolatorType::New();
 
     // Apply transforms to the annotated atlas images
-    warp_atlas_with_transform<AnnotationPixelType, AnnotationInterpolatorType::Pointer>(rigid_transform, 
+    apply_transform_to_atlas<AnnotationPixelType, AnnotationInterpolatorType::Pointer>(rigid_transform, 
                                                                               deformable_transform,
                                                                               annotation_interpolator,
                                                                               input_image,
                                                                               annotation_image_output_path,
                                                                               atlas_annotations_path,
                                                                               slice_index);
+
 
     return EXIT_SUCCESS;
 }
@@ -624,7 +563,7 @@ BSplineTransformType::Pointer compute_bSpline_transform(ImageType::Pointer movin
     BSplineTransformType::MeshSizeType meshSize;
     BSplineTransformType::OriginType fixedOrigin = fixedImage->GetOrigin();
     ImageType::SizeType fixedImageSize = fixedImage->GetLargestPossibleRegion().GetSize();
-    unsigned int numberOfGridNodesInOneDimension = 5;
+    unsigned int numberOfGridNodesInOneDimension = 8;
 
     for (int i = 0; i < 2; i++) {
         fixedPhysicalDimensions[i] = (fixedImageSize[i] - 1) * fixedImage->GetSpacing()[i];
@@ -709,24 +648,9 @@ BSplineTransformType::Pointer compute_bSpline_transform(ImageType::Pointer movin
     return transform;
 }
 
-
-void write_image(ImageType::Pointer im, const char * path) {
-    typedef itk::ImageFileWriter<EightBitImageType> WriterType;
-
-    InternalToEightBitCasterType::Pointer caster = InternalToEightBitCasterType::New();
-    caster->SetInput(im);
-
-    WriterType::Pointer fileWriter = WriterType::New();
-    fileWriter->SetFileName(path);
-    fileWriter->SetInput(caster->GetOutput());
-    fileWriter->Update();
-}
-
-
 void debug_out(const char * msg) {
     std::cout << "[Debug] " << msg << std::endl;
 }
-
 
 void display_registration_results(itk::OptimizerParameters<double> finalParameters, const unsigned int numberOfIterations, const double bestValue) {
     const double finalAngle           = finalParameters[0];

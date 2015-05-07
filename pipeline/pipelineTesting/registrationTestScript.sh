@@ -1,7 +1,7 @@
 #!/bin/bash
 
 inputPath='testInput.mhd'
-sliceIndex='365.0'
+sliceIndex='364.0'
 refOutPath='testRefOut.mhd'
 annoOutPath='testAnnoOut.mhd'
 hemiOutPath='testHemiOut.mhd'
