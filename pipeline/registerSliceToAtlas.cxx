@@ -26,8 +26,8 @@
 #include "itkMattesMutualInformationImageToImageMetricv4.h"
 #include "itkCastImageFilter.h"
 
-#include "itkGridForwardWarpImageFilter.h"
-#include "itkTransformToDisplacementFieldFilter.h"
+//#include "itkGridForwardWarpImageFilter.h"
+//#include "itkTransformToDisplacementFieldFilter.h"
 
 #include "itkPermuteAxesImageFilter.h"
 
@@ -177,6 +177,7 @@ typename itk::Image<ATLAS_PIXEL_TYPE, 2>::Pointer get_atlas_slice(int slice_inde
 
 
 // Warps a regular grid with the given transform.  Useful for visualizing the effects of registration
+/*
 template<typename TRANSFORM_TYPE, typename IMAGE_TYPE>
 int saveTransformAsDisplacementGrid(TRANSFORM_TYPE transform, IMAGE_TYPE reference_image, const char * save_path) {
     // Display or save the displacement field here
@@ -219,6 +220,7 @@ int saveTransformAsDisplacementGrid(TRANSFORM_TYPE transform, IMAGE_TYPE referen
 
     return 0;
 }
+*/
 
 
 // Template for quickly writing an image to disk, useful for debugging
