@@ -6,6 +6,7 @@
 #include "itkImageFileWriter.h"
 #include "itkExtractImageFilter.h"
 #include "itkImage.h"
+#include "itkMultiThreader.h"
 
 #include "itkImageRegistrationMethodv4.h"
 #include "itkImageRegistrationMethod.h"
@@ -25,9 +26,6 @@
 
 #include "itkMattesMutualInformationImageToImageMetricv4.h"
 #include "itkCastImageFilter.h"
-
-//#include "itkGridForwardWarpImageFilter.h"
-//#include "itkTransformToDisplacementFieldFilter.h"
 
 #include "itkPermuteAxesImageFilter.h"
 
@@ -330,7 +328,7 @@ public:
 
 int main(int argc, char *argv[]){
     //Check args
-    if (argc < 8) {
+    if (argc < 10) {
             std::cerr << "Missing Parameters " << std::endl;
             std::cerr << "Usage: " << argv[0];
             std::cerr << " inputImagePath sliceIndex";
@@ -341,7 +339,12 @@ int main(int argc, char *argv[]){
             std::cerr << " atlasReferencePath";
             std::cerr << " atlasAnnotationsPath";
             std::cerr << " atlasHemispheresPath";
+            std::cerr << " [maximum number of threads]";
             return EXIT_FAILURE;
+    } else if (argc >= 11) {
+        int n_threads = atoi(argv[10]);
+        std::cout << "Limiting multithreading to " << n_threads << " threads!" << std::endl;
+        itk::MultiThreader::SetGlobalMaximumNumberOfThreads(n_threads);
     }
 
     // Input paths

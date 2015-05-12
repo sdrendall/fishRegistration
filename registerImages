@@ -32,10 +32,11 @@ def create_parser():
 
 
 def create_arg_list(im_data, args):
+    # TODO: Max threads hard coded to 1
     arg_str = "registerSliceToAtlas {downsampledImagePath} {atlasIndex} " \
         "{registeredAtlasReferenceImagePath} {registeredAtlasLabelsPath} " \
         "{registeredHemisphereLabelsPath} {registrationMetricLogPath} ".format(**im_data) + \
-        "{refAtlasPath} {annoAtlasPath} {hemiAtlasPath} ".format(**vars(args))
+        "{refAtlasPath} {annoAtlasPath} {hemiAtlasPath} 1".format(**vars(args))
     return arg_str.split()
 
 
