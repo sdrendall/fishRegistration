@@ -329,18 +329,18 @@ public:
 int main(int argc, char *argv[]){
     //Check args
     if (argc < 10) {
-            std::cerr << "Missing Parameters " << std::endl;
-            std::cerr << "Usage: " << argv[0];
-            std::cerr << " inputImagePath sliceIndex";
-            std::cerr << " referenceImageOutputPath";
-            std::cerr << " annotationImageOutputPath";
-            std::cerr << " hemisphereImageOutputPath";
-            std::cerr << " registrationLogPath";
-            std::cerr << " atlasReferencePath";
-            std::cerr << " atlasAnnotationsPath";
-            std::cerr << " atlasHemispheresPath";
-            std::cerr << " [maximum number of threads]";
-            return EXIT_FAILURE;
+        std::cerr << "Missing Parameters " << std::endl;
+        std::cerr << "Usage: " << argv[0];
+        std::cerr << " inputImagePath sliceIndex";
+        std::cerr << " referenceImageOutputPath";
+        std::cerr << " annotationImageOutputPath";
+        std::cerr << " hemisphereImageOutputPath";
+        std::cerr << " registrationLogPath";
+        std::cerr << " atlasReferencePath";
+        std::cerr << " atlasAnnotationsPath";
+        std::cerr << " atlasHemispheresPath";
+        std::cerr << " [maximum number of threads]";
+        return EXIT_FAILURE;
     } else if (argc >= 11) {
         int n_threads = atoi(argv[10]);
         std::cout << "Limiting multithreading to " << n_threads << " threads!" << std::endl;
