@@ -437,7 +437,8 @@ function handles = loadReferenceImage(handles, setData)
 
 function handles = loadSliceImage(handles, setData)
     imPath = setData.downsampledImagePath;
-    handles.sliceIm = loadRegistrationImage(handles, imPath);
+    display_slice = mat2gray(loadRegistrationImage(handles, imPath));
+    handles.sliceIm = 4*uint8(255*display_slice);
 
 
 function handles = loadReferenceLabels(handles, setData)
@@ -628,9 +629,7 @@ function refreshDisplay(handles)
 
     switch handles.imageToDisplay
         case 'slice'
-            display_slice = mat2gray(handles.sliceIm);
-            display_slice = 3*uint8(255*display_slice);
-            imshow(display_slice, [])
+            imshow(handles.sliceIm, [])
         case 'reference'
             imshow(handles.refIm, [])
         case 'labels'
