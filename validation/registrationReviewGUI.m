@@ -628,7 +628,9 @@ function refreshDisplay(handles)
 
     switch handles.imageToDisplay
         case 'slice'
-            imshow(handles.sliceIm, [])
+            display_slice = mat2gray(handles.sliceIm);
+            display_slice = 3*uint8(255*display_slice);
+            imshow(display_slice, [])
         case 'reference'
             imshow(handles.refIm, [])
         case 'labels'
