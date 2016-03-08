@@ -412,7 +412,7 @@ function handles = loadExclusionSettings(handles)
     if ~isfield(currentSet, 'excludeRightHemisphere')
         currentSet.excludeRightHemisphere = false;
     end
-    if ~isfield(currentSet, 'regionIdsToExclude')
+    if ~isfield(currentSet, 'regionIdsToExclude') || ~isa(currentSet.regionIdsToExclude, 'double')
         currentSet.regionIdsToExclude = [];
     end
     handles = updateCurrentSet(handles, currentSet);
